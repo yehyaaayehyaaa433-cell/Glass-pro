@@ -185,13 +185,15 @@
   .badge-success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
   .badge-danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
 
-  /* تنسيقات الطباعة */
+  /* ================= تنسيقات الطباعة ================= */
   .print-only { display: none; }
   @media print {
-    body { background: white !important; overflow: visible; }
-    .bg-slideshow, .bg-overlay, .home-screen, .modal-overlay, .no-print, #loginScreen, #activationScreen, #backupModal { display: none !important; }
+    @page { margin: 0; size: auto; }
+    body { background: white !important; overflow: visible; margin: 0 !important; padding: 0 !important; }
+    .bg-slideshow, .bg-overlay, .home-screen, .modal-overlay, .no-print, #loginScreen, #activationScreen, #backupModal, #updateModal { display: none !important; }
     .print-only { display: block !important; }
-    .invoice-print { width: 100%; max-width: 800px; margin: 0 auto; color: black; }
+    
+    .invoice-print { width: 100%; max-width: 800px; margin: 0 auto; padding: 20px; color: black; }
     .invoice-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
     .invoice-header-info h2 { font-size: 28px; margin-bottom: 5px; }
     .invoice-header-info p { margin: 2px 0; font-size: 14px; }
@@ -363,7 +365,10 @@
                   <option value="amount">دج</option><option value="percent">%</option>
                 </select>
               </div>
-              <div style="text-align:left;"><div>المجموع النهائي: <span id="res-total">0 دج</span></div></div>
+              <div style="text-align:left;">
+                <div style="font-size:12px; color:var(--text-muted);" id="tva-info"></div>
+                <div>المجموع النهائي: <span id="res-total">0 دج</span></div>
+              </div>
             </div>
 
             <div style="margin-top: 20px;">
@@ -454,6 +459,24 @@
             <button class="btn-danger" onclick="factoryReset()"><i class="fa-solid fa-trash-can"></i> مسح كل البيانات وإعادة ضبط المصنع</button>
           </div>
 
+          <!-- إعدادات الضريبة TVA -->
+          <div class="card-inner" style="border: 1px solid var(--warning);">
+            <div class="card-title-inner" style="color: var(--warning);"><i class="fa-solid fa-percent"></i> إعدادات الضريبة (TVA)</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>تفعيل الضريبة:</label>
+                <select id="tvaEnabledInput">
+                  <option value="false">معطلة</option>
+                  <option value="true">مفعلة</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>نسبة الضريبة (%):</label>
+                <input type="number" id="tvaRateInput" value="19" min="0" max="100">
+              </div>
+            </div>
+          </div>
+
           <div class="card-inner" style="border: 1px solid var(--success);">
             <div class="card-title-inner" style="color: var(--success);"><i class="fa-solid fa-users"></i> إدارة حسابات العمال</div>
             <div class="form-row" style="align-items: flex-end;">
@@ -466,8 +489,8 @@
             <div id="workersList"></div>
           </div>
 
-          <div class="card-inner" style="border: 1px solid var(--warning);">
-            <div class="card-title-inner" style="color: var(--warning);"><i class="fa-solid fa-database"></i> النسخ الاحتياطي والاستعادة</div>
+          <div class="card-inner" style="border: 1px solid var(--primary);">
+            <div class="card-title-inner" style="color: var(--primary);"><i class="fa-solid fa-database"></i> النسخ الاحتياطي والاستعادة</div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
               <button class="btn-warning" onclick="exportData()"><i class="fa-solid fa-download"></i> تصدير نسخة احتياطية</button>
               <label class="btn-primary" style="cursor: pointer; margin: 0;">
@@ -538,9 +561,43 @@
     </div>
   </div>
 
+  <!-- ================= نافذة التحديث الجديد (جديدة) ================= -->
+  <div class="modal-overlay" id="updateModal" style="z-index: 5000;">
+    <div class="modal-content" style="max-width: 400px; border: 2px solid var(--success);">
+      <div class="modal-header" style="background: rgba(16, 185, 129, 0.1); border-bottom-color: rgba(16, 185, 129, 0.3);">
+        <div class="modal-title" style="color: var(--success);">
+          <i class="fa-solid fa-rotate"></i> تحديث جديد متوفر!
+        </div>
+      </div>
+      <div class="modal-body" style="text-align: center;">
+        <i class="fa-solid fa-cloud-arrow-down" style="font-size: 60px; color: var(--success); margin-bottom: 20px;"></i>
+        <h3 style="margin-bottom: 15px;">تم إصدار نسخة جديدة من البرنامج</h3>
+        <p style="color: var(--text-muted); margin-bottom: 25px; font-size: 14px;">
+          يرجى الضغط على الزر أدناه لتحديث البرنامج إلى أحدث إصدار. سيتم إعادة تحميل الصفحة للحصول على الميزات الجديدة.
+        </p>
+        <button class="btn-success" style="width: 100%; padding: 15px;" onclick="location.reload(true)"><i class="fa-solid fa-download"></i> تحديث الآن</button>
+      </div>
+    </div>
+  </div>
+
   <div id="printArea" class="print-only"></div>
 
 <script>
+  // ================= 0. نظام التحقق من التحديثات =================
+  // هام: في كل مرة تقوم بتحديث الملف على GitHub، قم بتغيير هذا الرقم (مثلاً إلى 1.0.1)
+  const APP_VERSION = "1.0.0"; 
+  
+  function checkForUpdates() {
+    const savedVersion = localStorage.getItem('glassAppVersion');
+    if (savedVersion && savedVersion !== APP_VERSION) {
+      // إذا كان هناك نسخة قديمة محفوظة، أظهر نافذة التحديث
+      document.getElementById('updateModal').classList.add('active');
+    } else {
+      // حفظ رقم الإصدار الجديد
+      localStorage.setItem('glassAppVersion', APP_VERSION);
+    }
+  }
+
   // تسجيل Service Worker لـ PWA
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js');
@@ -560,6 +617,8 @@
     adminPass: "1234", 
     workers: [], 
     clients: [], 
+    tvaEnabled: false,
+    tvaRate: 19,
     glassTypes: [
       { name: "زجاج عادي 4مم", price: 2000 },
       { name: "زجاج مقسى 6مم", price: 3500 },
@@ -583,6 +642,7 @@
   };
 
   function init() {
+    checkForUpdates(); // تشغيل التحقق من التحديث
     checkLicense();
 
     const savedSet = localStorage.getItem('glassAppSettings');
@@ -592,6 +652,8 @@
     if (!appSettings.workers) appSettings.workers = [];
     if (!appSettings.clients) appSettings.clients = [];
     if (!appSettings.adminPass) appSettings.adminPass = "1234";
+    if (appSettings.tvaEnabled === undefined) appSettings.tvaEnabled = false;
+    if (!appSettings.tvaRate) appSettings.tvaRate = 19;
     
     const savedInv = localStorage.getItem('glassInvoices');
     savedInvoices = savedInv ? JSON.parse(savedInv) : [];
@@ -667,6 +729,8 @@
     }
   }
 
+  // ... (باقي الدوال كما هي تماماً، لا حاجة لتغييرها)
+  
   // ================= 3. النسخ الاحتياطي اليومي =================
   function checkDailyBackup() {
     const lastBackup = localStorage.getItem('glassLastBackupDate');
@@ -967,6 +1031,9 @@
     document.getElementById('shopAddressInput').value = appSettings.shopAddress || "";
     document.getElementById('shopNotesInput').value = appSettings.shopNotes || "";
     
+    document.getElementById('tvaEnabledInput').value = appSettings.tvaEnabled ? "true" : "false";
+    document.getElementById('tvaRateInput').value = appSettings.tvaRate || 19;
+
     const typeSelect = document.getElementById('type');
     typeSelect.innerHTML = '';
     appSettings.glassTypes.forEach((type) => {
@@ -983,6 +1050,7 @@
     renderInvoicesList();
     renderDebtsList();
     calcPreview();
+    updateTvaInfo();
   }
 
   function handleLogoUpload(event) {
@@ -1050,6 +1118,16 @@
     document.getElementById('invoiceNumber').value = "INV-" + Math.floor(1000 + Math.random() * 9000);
   }
 
+  function updateTvaInfo() {
+    const tvaInfo = document.getElementById('tva-info');
+    if (appSettings.tvaEnabled) {
+      tvaInfo.style.display = 'block';
+      tvaInfo.innerText = `* سيتم إضافة ضريبة ${appSettings.tvaRate}%`;
+    } else {
+      tvaInfo.style.display = 'none';
+    }
+  }
+
   function toggleDebtFields() {
     const method = document.getElementById('paymentMethod').value;
     const client = document.getElementById('clientSelect').value;
@@ -1108,17 +1186,28 @@
   function updateCartTotals() {
     let subTotal = 0;
     cart.forEach(item => subTotal += item.total);
+    
     const discountVal = parseFloat(document.getElementById('discount').value) || 0;
     const discountType = document.getElementById('discountType').value;
     let discountAmount = discountType === 'percent' ? (subTotal * (discountVal / 100)) : discountVal;
-    let finalTotal = Math.max(0, subTotal - discountAmount);
+    
+    let afterDiscount = Math.max(0, subTotal - discountAmount);
+
+    let tvaAmount = 0;
+    if (appSettings.tvaEnabled) {
+      tvaAmount = afterDiscount * (appSettings.tvaRate / 100);
+    }
+
+    let finalTotal = afterDiscount + tvaAmount;
+    
     document.getElementById('res-total').innerText = finalTotal.toFixed(2) + ' دج';
     
     if (document.getElementById('paymentMethod').value === 'credit') {
       const paid = parseFloat(document.getElementById('paidAmount').value) || 0;
       document.getElementById('remainingAmount').value = Math.max(0, finalTotal - paid).toFixed(2) + ' دج';
     }
-    return { subTotal, discountAmount, finalTotal };
+
+    return { subTotal, discountAmount, tvaAmount, finalTotal };
   }
 
   function resetAll() {
@@ -1150,7 +1239,7 @@
     const invoiceData = {
       id: document.getElementById('invoiceNumber').value, date: now.toLocaleString('ar-DZ'), fullDate: now.toISOString(),
       client: clientName, clientPhone: clientPhone, items: [...cart],
-      subTotal: totals.subTotal, discount: totals.discountAmount, total: totals.finalTotal,
+      subTotal: totals.subTotal, discount: totals.discountAmount, tva: totals.tvaAmount, total: totals.finalTotal,
       isDebt, paid: paidAmount, remaining
     };
 
@@ -1176,9 +1265,13 @@
     });
 
     let logoHtml = appSettings.logo ? `<div class="invoice-logo"><img src="${appSettings.logo}"></div>` : '';
+    
     let summaryHtml = `<div class="summary-row"><span>المجموع الفرعي:</span> <span>${data.subTotal.toFixed(2)} دج</span></div>`;
     if (data.discount > 0) summaryHtml += `<div class="summary-row" style="color:red;"><span>الخصم:</span> <span>- ${data.discount.toFixed(2)} دج</span></div>`;
+    if (appSettings.tvaEnabled && data.tva > 0) summaryHtml += `<div class="summary-row"><span>الضريبة (${appSettings.tvaRate}%):</span> <span>${data.tva.toFixed(2)} دج</span></div>`;
+    
     summaryHtml += `<div class="summary-row total"><span>المجموع النهائي:</span> <span>${data.total.toFixed(2)} دج</span></div>`;
+    
     if (data.isDebt) {
       summaryHtml += `<div class="summary-row" style="margin-top:10px;"><span>المدفوع:</span> <span>${data.paid.toFixed(2)} دج</span></div>`;
       summaryHtml += `<div class="summary-row debt"><span>الدين المتبقي:</span> <span>${data.remaining.toFixed(2)} دج</span></div>`;
@@ -1275,6 +1368,9 @@
     appSettings.shopPhone = document.getElementById('shopPhoneInput').value.trim();
     appSettings.shopAddress = document.getElementById('shopAddressInput').value.trim();
     appSettings.shopNotes = document.getElementById('shopNotesInput').value.trim();
+    
+    appSettings.tvaEnabled = document.getElementById('tvaEnabledInput').value === "true";
+    appSettings.tvaRate = parseFloat(document.getElementById('tvaRateInput').value) || 19;
     
     const newPass = document.getElementById('adminPassInput').value.trim();
     if(newPass) {
