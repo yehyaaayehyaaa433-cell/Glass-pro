@@ -355,6 +355,8 @@
                             <div style="margin-bottom: 12px;"><label>العنوان</label><input type="text" id="setting-address" required></div>
                             <div style="margin-bottom: 12px;"><label>العملة</label><input type="text" id="setting-currency" required></div>
                             <div style="margin-bottom: 12px;"><label>ملاحظات أسفل الفاتورة</label><textarea id="setting-notes" rows="2"></textarea></div>
+                            <div style="margin-bottom: 12px;"><label>اسم الفاتورة (مثال: FACTURE)</label><input type="text" id="setting-invoice-title" placeholder="FACTURE"></div>
+                            <div style="margin-bottom: 12px;"><label>بادئة رقم الفاتورة (مثال: INV)</label><input type="text" id="setting-invoice-prefix" placeholder="INV"></div>
                             <button type="submit" class="btn btn-primary" style="width: 100%;"><i class="fa-solid fa-check"></i> حفظ البيانات</button>
                         </form>
                     </div>
@@ -480,6 +482,8 @@
             currency: 'دج',
             tvaEnabled: false,
             tvaRate: 19,
+            invoiceTitle: 'FACTURE',
+            invoicePrefix: 'INV',
             bgImages: [],
             plans: [
                 { id: 'p1', name: 'زجاج عادي 4مم', price: 2000, days: 1 },
@@ -530,6 +534,8 @@
         if (!db.settings.tvaEnabled) db.settings.tvaEnabled = false;
         if (!db.settings.tvaRate) db.settings.tvaRate = 19;
         if (!db.users || db.users.length === 0) db.users = defaultData.users;
+        if (!db.settings.invoiceTitle) db.settings.invoiceTitle = 'FACTURE';
+        if (!db.settings.invoicePrefix) db.settings.invoicePrefix = 'INV';
         saveDB();
     }
 
@@ -634,6 +640,8 @@
         document.getElementById('setting-notes').value = db.settings.notes || '';
         document.getElementById('setting-tva-enabled').value = db.settings.tvaEnabled ? "true" : "false";
         document.getElementById('setting-tva-rate').value = db.settings.tvaRate || 19;
+        document.getElementById('setting-invoice-title').value = db.settings.invoiceTitle || 'FACTURE';
+        document.getElementById('setting-invoice-prefix').value = db.settings.invoicePrefix || 'INV';
     }
 
     function populateLoginUsers() {
@@ -1096,10 +1104,13 @@
         let finalClientId = null;
         let paidAmount = 0;
         let remainingAmount = 0;
+        let initialBalance = 0;
 
         if (method === 'debt') {
             finalClientId = document.getElementById('debt-client-id').value;
             if (!finalClientId) { showToast('اختر زبون', 'warning'); return false; }
+            
+            initialBalance = parseFloat(document.getElementById('initial-balance')?.value) || 0;
             paidAmount = parseFloat(document.getElementById('partial-payment').value) || 0;
             if (paidAmount > total) paidAmount = total;
             remainingAmount = total - paidAmount;
@@ -1107,6 +1118,7 @@
             paidAmount = total;
         }
 
+        // خصم الكميات من المخزون
         cart.forEach(item => { 
             if (item.type === 'product') {
                 const p = db.products.find(prod => prod.id === item.id); 
@@ -1122,13 +1134,14 @@
             amount: total, 
             clientId: finalClientId,
             by: db.currentUser.name,
-            paid: paidAmount,         // حفظ المبلغ المدفوع
-            remaining: remainingAmount // حفظ المبلغ المتبقي
+            paid: paidAmount,
+            remaining: remainingAmount,
+            initialBalance: initialBalance,
+            items: JSON.parse(JSON.stringify(cart)) // <--- هذا هو السطر السحري لحفظ القطع
         };
 
         db.payments.unshift(saleData);
         
-        // إذا كان هناك دفعة أولى، نسجلها كعملية منفصلة لتخصم من الدين لاحقاً
         if (method === 'debt' && paidAmount > 0) {
             db.payments.unshift({ 
                 id: 'PAY-' + Date.now(), 
@@ -1166,76 +1179,147 @@
     }
 
     // --- الطباعة الاحترافية ---
-    function printInvoice(sale) {
-        let clientName = "زبون عابر";
-        if (sale.clientId) {
-            const client = db.members.find(m => m.id === sale.clientId);
-            if (client) clientName = client.name;
-        }
-
-        // إضافة تفاصيل الدفع في الفاتورة
-        let paymentDetailsHtml = '';
-        if (sale.type === 'دين') {
-            paymentDetailsHtml = `
-                <div style="margin-bottom: 10px; font-size: 16px; font-weight: bold;">طريقة الدفع: <span style="color: red;">آجل (دين)</span></div>
-                <div style="margin-bottom: 10px; font-size: 14px;">المبلغ المدفوع: ${(sale.paid || 0).toLocaleString()} دج</div>
-                <div style="margin-bottom: 10px; font-size: 14px;">الدين المتبقي: <span style="color: red; font-weight: bold;">${(sale.remaining || 0).toLocaleString()} دج</span></div>
-            `;
-        } else {
-            paymentDetailsHtml = `<div style="margin-bottom: 10px; font-size: 16px; font-weight: bold;">طريقة الدفع: <span style="color: green;">نقداً</span></div>`;
-        }
-
-        const printWindow = window.open('', '_blank', 'width=800,height=600');
-        
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html dir="rtl">
-            <head>
-                <title>فاتورة مبيعات</title>
-                <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
-                <style>
-                    @page { margin: 0; size: auto; }
-                    body { font-family: 'Cairo', sans-serif; padding: 30px; color: #000; }
-                    .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
-                    .header h1 { margin: 0 0 10px 0; font-size: 24px; }
-                    .header p { margin: 2px 0; font-size: 14px; }
-                    .details { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 14px; }
-                    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-                    th, td { border: 1px solid #000; padding: 10px; text-align: center; }
-                    th { background: #f3f4f6; }
-                    .total { text-align: left; font-size: 18px; font-weight: bold; margin-bottom: 10px; }
-                    .footer { text-align: center; margin-top: 40px; font-size: 12px; border-top: 1px dashed #000; padding-top: 10px; }
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <h1>${db.settings.gymName}</h1>
-                    <p>الهاتف: ${db.settings.phone || ''} | العنوان: ${db.settings.address || ''}</p>
-                    <p style="font-weight: bold; margin-top: 5px;">فاتورة مبيعات</p>
-                </div>
-                <div class="details">
-                    <div><strong>رقم الفاتورة:</strong> ${sale.id}</div>
-                    <div><strong>التاريخ:</strong> ${sale.date}</div>
-                    <div><strong>الزبون:</strong> ${clientName}</div>
-                </div>
-                <table>
-                    <thead><tr><th>البيان</th><th>المجموع</th></tr></thead>
-                    <tbody><tr><td>${sale.details}</td><td>${sale.amount} ${db.settings.currency}</td></tr></tbody>
-                </table>
-                <div class="total">الإجمالي: ${sale.amount} ${db.settings.currency}</div>
-                ${paymentDetailsHtml}
-                <div class="footer">${db.settings.notes || 'شكراً لتعاملكم معنا!'}</div>
-            </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
-        printWindow.focus();
-        
-        setTimeout(() => {
-            printWindow.print();
-        }, 500);
+function printInvoice(sale) {
+    let clientName = "Client Divers";
+    if (sale.clientId) {
+        const client = db.members.find(m => m.id === sale.clientId);
+        if (client) clientName = client.name;
     }
+
+    let rowsHtml = '';
+    
+    if (sale.items && sale.items.length > 0) {
+        sale.items.forEach(item => {
+            let areaStr = '-';
+            if (item.area) {
+                areaStr = (item.area * item.qty).toFixed(3);
+            }
+            let unitPrice = (item.price / item.qty).toFixed(2);
+            let dimensionStr = (item.width && item.height) ? `${item.width}×${item.height}` : '-';
+
+            rowsHtml += `
+                <tr>
+                    <td style="border: 1px solid #000; padding: 8px; text-align: right;">${item.name}</td>
+                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${dimensionStr}</td>
+                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${areaStr}</td>
+                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${item.qty}</td>
+                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${unitPrice}</td>
+                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${item.price.toFixed(2)}</td>
+                </tr>
+            `;
+        });
+    } else {
+        rowsHtml = `<tr><td style="border: 1px solid #000; padding: 8px;" colspan="6">${sale.details}</td></tr>`;
+    }
+
+    // جلب اسم الفاتورة من الإعدادات (افتراضياً FACTURE)
+    const invoiceTitle = db.settings.invoiceTitle || 'FACTURE';
+    
+    // استخراج الرقم الصافي فقط (إزالة أي حروف مثل INV- إن وجدت)
+    // نأخذ الجزء الأخير من الـ ID أو نستخدمه كما هو
+    let rawNumber = sale.id;
+    if (rawNumber.includes('-')) {
+        // إذا كان الرقم يحتوي على شُرط، نأخذ آخر جزء (الرقم فقط)
+        rawNumber = rawNumber.split('-').pop(); 
+    }
+
+    // تنظيف بيانات الورشة من القيم الفارغة أو الأصفار
+    const shopAddress = (db.settings.address && db.settings.address !== '0') ? db.settings.address : '';
+    const shopPhone = (db.settings.phone && db.settings.phone !== '0') ? db.settings.phone : '';
+
+    const invoiceHtml = `
+        <!DOCTYPE html>
+        <html dir="ltr">
+        <head>
+            <title>${invoiceTitle}</title>
+            <style>
+                @page { margin: 0; size: auto; }
+                body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
+                .top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+                .shop-info { text-align: left; font-size: 13px; line-height: 1.6; }
+                .shop-info h1 { margin: 0 0 6px 0; font-size: 22px; font-weight: bold; }
+                .invoice-number { text-align: center; font-size: 15px; font-weight: bold; }
+                .invoice-date { text-align: right; font-size: 13px; font-weight: bold; }
+                .divider { border-top: 2px solid #000; margin: 15px 0 20px 0; }
+                .client-row { margin-bottom: 20px; font-size: 14px; }
+                .main-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                .main-table th { border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; background: #fff; }
+                .summary-table { width: 40%; float: right; border-collapse: collapse; }
+                .summary-table td { border: 1px solid #000; padding: 8px; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <div class="top-row">
+                <div class="shop-info">
+                    <h1>${db.settings.gymName}</h1>
+                    ${shopAddress ? `<div>${shopAddress}</div>` : ''}
+                    ${shopPhone ? `<div>${shopPhone}</div>` : ''}
+                </div>
+                <div class="invoice-number">
+                    ${invoiceTitle} N°: ${rawNumber}
+                </div>
+                <div class="invoice-date">
+                    Date: ${sale.date}
+                </div>
+            </div>
+            <div class="divider"></div>
+            <div class="client-row">
+                <strong>Client:</strong> ${clientName}
+            </div>
+
+            <table class="main-table">
+                <thead>
+                    <tr>
+                        <th>DESIGNATION</th>
+                        <th>DIMENSION</th>
+                        <th>NOMBRE[M]</th>
+                        <th>QUANTITE</th>
+                        <th>PRIX UNIT</th>
+                        <th>MONTANT</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+
+            <table class="summary-table">
+                <tr>
+                    <td style="text-align: left; width: 50%;">SOLDE UNITAL</td>
+                    <td style="text-align: left;">${(sale.initialBalance || 0).toFixed(2)} DZD</td>
+                </tr>
+                <tr>
+                    <td style="text-align: left;">VERSEMENT</td>
+                    <td style="text-align: left;">${(sale.paid || 0).toFixed(2)} DZD</td>
+                </tr>
+                <tr>
+                    <td style="text-align: left;">TOTAL</td>
+                    <td style="text-align: left;">${sale.amount.toFixed(2)} DZD</td>
+                </tr>
+            </table>
+        </body>
+        </html>
+    `;
+
+    let printFrame = document.getElementById('print-frame');
+    if (!printFrame) {
+        printFrame = document.createElement('iframe');
+        printFrame.id = 'print-frame';
+        printFrame.style.position = 'absolute';
+        printFrame.style.width = '0';
+        printFrame.style.height = '0';
+        printFrame.style.border = 'none';
+        document.body.appendChild(printFrame);
+    }
+
+    const frameDoc = printFrame.contentWindow.document;
+    frameDoc.open();
+    frameDoc.write(invoiceHtml);
+    frameDoc.close();
+
+    setTimeout(() => {
+        printFrame.contentWindow.focus();
+        printFrame.contentWindow.print();
+    }, 500);
+}
 
     // --- المخزون والأنواع ---
     function renderInventory() {
@@ -1369,6 +1453,8 @@
         db.settings.address = document.getElementById('setting-address').value;
         db.settings.currency = document.getElementById('setting-currency').value;
         db.settings.notes = document.getElementById('setting-notes').value;
+        db.settings.invoiceTitle = document.getElementById('setting-invoice-title').value || 'FACTURE';
+        db.settings.invoicePrefix = document.getElementById('setting-invoice-prefix').value || '';
         saveDB(); updateSettingsUI(); renderAll();
         showToast('✅ تم حفظ البيانات', 'success');
     }
