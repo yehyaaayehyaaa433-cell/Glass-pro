@@ -4,11 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>GlassPro - إدارة ورشة الزجاج</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+        <!-- ربط أيقونة التطبيق -->
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.json">
 
+    <!-- 1. المكتبات المحلية (يجب وضعها في مجلد libs) -->
+    <script src="libs/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="libs/fontawesome-free-7.3.1-web/css/all.min.css">
+    
+    <!-- 2. خط Cairo المحلي -->
     <style>
+        @font-face {
+            font-family: 'Cairo';
+            src: url('libs/fonts/Cairo-Regular.woff2') format('woff2');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Cairo';
+            src: url('libs/fonts/Cairo-Bold.woff2') format('woff2');
+            font-weight: 700;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Cairo';
+            src: url('libs/fonts/Cairo-Black.woff2') format('woff2');
+            font-weight: 900;
+            font-style: normal;
+            font-display: swap;
+        }
+
         * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
 
         body {
@@ -46,16 +74,16 @@
         .top-bar-btn { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; border: 1px solid rgba(0, 0, 0, 0.06); background: rgba(255, 255, 255, 0.9); color: #374151; }
         .top-bar-btn:hover { background: rgba(99, 102, 241, 0.12); color: #6366f1; transform: scale(1.05); }
 
-        .launcher-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; max-width: 900px; margin: 0 auto; }
+        .launcher-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 55px; max-width: 1300px; margin: 0 auto; }
         @media (max-width: 640px) { .launcher-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; } }
 
         .app-icon { display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); user-select: none; }
         .app-icon:hover { transform: scale(1.08) translateY(-6px); }
 
-        .app-icon-tile {
-            width: 100%; aspect-ratio: 1; border-radius: 24px; display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 40px; position: relative; overflow: hidden;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 3px 8px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+         .app-icon-tile {
+          width: 140%; aspect-ratio: 1; border-radius: 23px; display: flex; align-items: center; justify-content: center;
+          color: white; font-size: 50px; line-height: 1; position: relative; overflow: hidden;
+         box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 3px 8px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.4);
         }
         .app-icon-label { font-size: 14px; font-weight: 800; color: white; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9); text-align: center; }
 
@@ -137,7 +165,6 @@
         .dock-item { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; cursor: pointer; transition: transform 0.25s; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2); }
         .dock-item:hover { transform: scale(1.35) translateY(-12px); }
 
-        /* تنسيقات الطباعة */
         @media print {
             body * { visibility: hidden; }
             #printArea, #printArea * { visibility: visible; }
@@ -157,7 +184,6 @@
         <div id="toast-container" style="position: fixed; top: 90px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: none;"></div>
         <div id="overlay" class="overlay" onclick="closeAllWindows()"></div>
 
-        <!-- TOP BAR -->
         <div class="top-bar">
             <div style="display: flex; align-items: center; gap: 12px;">
                 <div style="width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(145deg, #6366f1, #8b5cf6); display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 4px 12px rgba(99,102,241,0.5);">
@@ -178,7 +204,6 @@
             </div>
         </div>
 
-        <!-- LAUNCHER SCREEN -->
         <div id="launcher-screen" style="padding: 100px 20px 140px; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;">
             <div class="launcher-grid fade-in">
                 <div class="app-icon" onclick="openWindow('pos')">
@@ -212,7 +237,6 @@
             </div>
         </div>
 
-        <!-- DOCK -->
         <div class="dock-container">
             <div class="dock-item icon-amber" onclick="openWindow('pos')" title="نقطة البيع"><i class="fa-solid fa-cash-register"></i></div>
             <div class="dock-item icon-purple" onclick="openWindow('members')" title="الزبائن"><i class="fa-solid fa-users"></i></div>
@@ -223,7 +247,6 @@
             <div class="dock-item icon-gray admin-only" onclick="openWindow('settings')" title="الإعدادات"><i class="fa-solid fa-sliders"></i></div>
         </div>
 
-        <!-- WINDOWS -->
         <div class="window" id="window-pos">
             <div class="window-header">
                 <div class="window-dots"><div class="window-dot close" onclick="closeAllWindows()"></div><div class="window-dot minimize"></div><div class="window-dot maximize"></div></div>
@@ -231,13 +254,7 @@
                 <div style="width: 60px;"></div>
             </div>
             <div class="window-body">
-                <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">
-                    <label style="margin:0; white-space:nowrap;">الزبون:</label>
-                    <select id="pos-client-select" style="max-width: 250px;">
-                        <option value="">-- زبون عابر --</option>
-                    </select>
-                </div>
-
+                
                 <div class="inner-card" style="border: 2px solid #f59e0b; margin-bottom: 20px;">
                     <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 16px; color: #1f2937;"><i class="fa-solid fa-ruler-combined" style="color: #f59e0b;"></i> زجاج بالمقاس</h3>
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
@@ -290,12 +307,10 @@
             </div>
         </div>
 
-        <!-- شاشة المخزون المعدلة -->
         <div class="window" id="window-inventory">
             <div class="window-header"><div class="window-dots"><div class="window-dot close" onclick="closeAllWindows()"></div><div class="window-dot minimize"></div><div class="window-dot maximize"></div></div><div class="window-title">📦 إدارة المخزون وأنواع الزجاج</div><div style="width: 60px;"></div></div>
             <div class="window-body">
                 
-                <!-- إدارة أنواع الزجاج (نُقلت هنا) -->
                 <div class="inner-card" style="margin-bottom: 24px; border: 1px solid #8b5cf6;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                         <h3 style="font-size: 14px; font-weight: 700; color: #1f2937;"><i class="fa-solid fa-tags" style="color: #8b5cf6;"></i> أنواع الزجاج (سعر المتر المربع)</h3>
@@ -304,7 +319,6 @@
                     <div id="plans-list-container"></div>
                 </div>
 
-                <!-- إدارة الإكسسوارات -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h3 style="font-size: 14px; font-weight: 700; color: #1f2937;"><i class="fa-solid fa-boxes-stacked" style="color: #ec4899;"></i> الإكسسوارات والمنتجات</h3>
                     <button class="btn btn-success" onclick="openProductModal()"><i class="fa-solid fa-plus"></i> إضافة منتج</button>
@@ -320,7 +334,6 @@
             </div>
         </div>
 
-        <!-- شاشة المبيعات (تمت إضافة زر الطباعة) -->
         <div class="window" id="window-payments">
             <div class="window-header"><div class="window-dots"><div class="window-dot close" onclick="closeAllWindows()"></div><div class="window-dot minimize"></div><div class="window-dot maximize"></div></div><div class="window-title">💰 المبيعات والديون</div><div style="width: 60px;"></div></div>
             <div class="window-body">
@@ -340,13 +353,11 @@
             <div class="window-body"><div id="backup-content"></div></div>
         </div>
 
-        <!-- شاشة الإعدادات المعدلة -->
         <div class="window admin-only" id="window-settings">
             <div class="window-header"><div class="window-dots"><div class="window-dot close" onclick="closeAllWindows()"></div><div class="window-dot minimize"></div><div class="window-dot maximize"></div></div><div class="window-title">⚙️ الإعدادات</div><div style="width: 60px;"></div></div>
             <div class="window-body">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
                     
-                    <!-- بيانات المحل -->
                     <div class="inner-card">
                         <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #1f2937;"><i class="fa-solid fa-building" style="color: #6366f1;"></i> بيانات الورشة والفاتورة</h3>
                         <form onsubmit="saveGeneralSettings(event)">
@@ -354,14 +365,13 @@
                             <div style="margin-bottom: 12px;"><label>رقم الهاتف</label><input type="text" id="setting-phone" required></div>
                             <div style="margin-bottom: 12px;"><label>العنوان</label><input type="text" id="setting-address" required></div>
                             <div style="margin-bottom: 12px;"><label>العملة</label><input type="text" id="setting-currency" required></div>
-                            <div style="margin-bottom: 12px;"><label>ملاحظات أسفل الفاتورة</label><textarea id="setting-notes" rows="2"></textarea></div>
                             <div style="margin-bottom: 12px;"><label>اسم الفاتورة (مثال: FACTURE)</label><input type="text" id="setting-invoice-title" placeholder="FACTURE"></div>
-                            <div style="margin-bottom: 12px;"><label>بادئة رقم الفاتورة (مثال: INV)</label><input type="text" id="setting-invoice-prefix" placeholder="INV"></div>
+                            <div style="margin-bottom: 12px;"><label>بادئة رقم الفاتورة (اتركها فارغة لحذفها)</label><input type="text" id="setting-invoice-prefix" placeholder="INV"></div>
+                            <div style="margin-bottom: 12px;"><label>ملاحظات أسفل الفاتورة</label><textarea id="setting-notes" rows="2"></textarea></div>
                             <button type="submit" class="btn btn-primary" style="width: 100%;"><i class="fa-solid fa-check"></i> حفظ البيانات</button>
                         </form>
                     </div>
 
-                    <!-- إعدادات الضريبة TVA -->
                     <div class="inner-card" style="border: 1px solid #f59e0b;">
                         <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #1f2937;"><i class="fa-solid fa-percent" style="color: #f59e0b;"></i> إعدادات الضريبة (TVA)</h3>
                         <div style="margin-bottom: 12px;">
@@ -378,7 +388,6 @@
                         <button type="button" class="btn btn-warning" onclick="saveTvaSettings()" style="width: 100%;"><i class="fa-solid fa-check"></i> حفظ إعدادات TVA</button>
                     </div>
 
-                    <!-- إدارة المستخدمين -->
                     <div class="inner-card">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                             <h3 style="font-size: 14px; font-weight: 700; color: #1f2937;"><i class="fa-solid fa-user-shield" style="color: #6366f1;"></i> المستخدمون</h3>
@@ -387,7 +396,6 @@
                         <div id="users-list-container"></div>
                     </div>
 
-                    <!-- خلفيات الشاشة -->
                     <div class="inner-card">
                         <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #1f2937;"><i class="fa-solid fa-images" style="color: #10b981;"></i> خلفيات الشاشة</h3>
                         <input type="file" id="bg-images-input" accept="image/*" multiple onchange="handleBgUpload(event)" style="padding: 7px; margin-bottom: 10px;">
@@ -395,7 +403,6 @@
                         <button class="btn btn-danger" style="width: 100%;" onclick="clearBgImages()">حذف الصور</button>
                     </div>
 
-                    <!-- التفعيل والمدة التجريبية -->
                     <div class="inner-card" style="border: 2px solid var(--primary); background: #eff6ff;">
                         <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #1e40af;"><i class="fa-solid fa-key" style="color: #1e40af;"></i> حالة الترخيص</h3>
                         <div id="license-status-container"></div>
@@ -405,7 +412,6 @@
             </div>
         </div>
 
-        <!-- Cart Sheet -->
         <div id="cart-sheet" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 300; display: none; align-items: flex-end; justify-content: center; padding: 20px;">
             <div style="width: 100%; max-width: 600px; border-radius: 24px; padding: 20px; max-height: 70vh; display: flex; flex-direction: column; background: white; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -426,7 +432,6 @@
             </div>
         </div>
 
-        <!-- Modal -->
         <div id="modal-container" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 400; display: none; align-items: center; justify-content: center; padding: 20px;">
             <div style="width: 100%; max-width: 500px; border-radius: 20px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; background: white; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
                 <div style="padding: 16px 20px; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center;">
@@ -437,7 +442,6 @@
             </div>
         </div>
 
-        <!-- Login Screen -->
         <div id="loginScreen" style="display: none; position: fixed; inset: 0; z-index: 500; align-items: center; justify-content: center;">
             <div class="login-card">
                 <div class="login-avatar"><i class="fa-solid fa-layer-group"></i></div>
@@ -465,9 +469,6 @@
     </div>
 
 <script>
-    // ==========================================================
-    // 1. الإعدادات الافتراضية ونظام الترخيص
-    // ==========================================================
     const DB_KEY = 'glasspro_db_v2';
     const SECRET_ACTIVATION_CODE = "GLASS-PRO-2026";
     const TRIAL_DAYS = 10;
@@ -483,7 +484,7 @@
             tvaEnabled: false,
             tvaRate: 19,
             invoiceTitle: 'FACTURE',
-            invoicePrefix: 'INV',
+            invoicePrefix: '',
             bgImages: [],
             plans: [
                 { id: 'p1', name: 'زجاج عادي 4مم', price: 2000, days: 1 },
@@ -513,9 +514,6 @@
 
     function saveDB() { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
 
-    // ==========================================================
-    // 2. التهيئة ونظام الترخيص
-    // ==========================================================
     document.addEventListener('DOMContentLoaded', () => {
         migrateData();
         checkLicense();
@@ -533,9 +531,9 @@
         if (!db.payments) db.payments = [];
         if (!db.settings.tvaEnabled) db.settings.tvaEnabled = false;
         if (!db.settings.tvaRate) db.settings.tvaRate = 19;
-        if (!db.users || db.users.length === 0) db.users = defaultData.users;
         if (!db.settings.invoiceTitle) db.settings.invoiceTitle = 'FACTURE';
-        if (!db.settings.invoicePrefix) db.settings.invoicePrefix = 'INV';
+        if (!db.settings.invoicePrefix) db.settings.invoicePrefix = '';
+        if (!db.users || db.users.length === 0) db.users = defaultData.users;
         saveDB();
     }
 
@@ -557,7 +555,6 @@
             const daysLeft = TRIAL_DAYS - daysPassed;
 
             if (daysLeft <= 0) {
-                // انتهت الفترة التجريبية
                 document.getElementById('launcher-screen').style.display = 'none';
                 document.getElementById('loginScreen').style.display = 'none';
                 openModal('⛔ انتهت فترة التجربة', `
@@ -569,10 +566,8 @@
                         <button class="btn btn-success" style="width: 100%; padding: 12px;" onclick="activateLicense()">تفعيل البرنامج</button>
                     </div>
                 `);
-                // إخفاء زر الإغلاق في النافذة
                 document.getElementById('modal-container').querySelector('button').style.display = 'none';
             } else {
-                // ما زال في الفترة التجريبية
                 document.getElementById('launcher-screen').style.display = 'flex';
                 document.getElementById('loginScreen').style.display = 'none';
                 startTrialTimer(false, daysLeft);
@@ -613,9 +608,6 @@
         }
     }
 
-    // ==========================================================
-    // 3. تسجيل الدخول والتهيئة
-    // ==========================================================
     function checkUserSession() {
         if (db.currentUser) {
             document.getElementById('loginScreen').style.display = 'none';
@@ -641,7 +633,7 @@
         document.getElementById('setting-tva-enabled').value = db.settings.tvaEnabled ? "true" : "false";
         document.getElementById('setting-tva-rate').value = db.settings.tvaRate || 19;
         document.getElementById('setting-invoice-title').value = db.settings.invoiceTitle || 'FACTURE';
-        document.getElementById('setting-invoice-prefix').value = db.settings.invoicePrefix || 'INV';
+        document.getElementById('setting-invoice-prefix').value = db.settings.invoicePrefix || '';
     }
 
     function populateLoginUsers() {
@@ -704,9 +696,6 @@
         document.getElementById('launcher-screen').style.display = 'none';
     }
 
-    // ==========================================================
-    // 4. النوافذ والأدوات
-    // ==========================================================
     function openWindow(name) {
         closeAllWindows();
         const windowEl = document.getElementById(`window-${name}`);
@@ -768,9 +757,6 @@
     function closeConfirm() { document.getElementById('confirm-container').classList.remove('open'); }
     function executeConfirm() { if (window._pendingConfirm) window._pendingConfirm(); closeConfirm(); }
 
-    // ==========================================================
-    // 5. دوال العرض الأساسية
-    // ==========================================================
     function renderAll() {
         renderDashboard();
         renderMembers();
@@ -840,7 +826,6 @@
         });
     }
 
-    // --- إدارة الزبائن والديون ---
     function renderMembers() {
         const container = document.getElementById('members-container');
         if (!container) return;
@@ -932,7 +917,6 @@
         showToast('✅ تم تسجيل الدفعة', 'success');
     }
 
-    // --- نقطة البيع ---
     function updateClientSelect() {
         const sel = document.getElementById('pos-client-select');
         if(!sel) return;
@@ -964,18 +948,33 @@
         const qty = parseInt(document.getElementById('pos-qty').value);
         const typeVal = document.getElementById('pos-glass-type').value;
         const cut = parseFloat(document.getElementById('pos-cut-cost').value) || 0;
+        
         if (!w || !h) { showToast('أدخل المقاسات', 'warning'); return; }
 
-        const area = (w/100) * (h/100) * qty;
-        const price = parseFloat(typeVal.split('|')[1]);
-        let total = (area * price) + (cut * qty);
-        if (db.settings.tvaEnabled) total += total * (db.settings.tvaRate / 100);
+        const areaPerPiece = (w/100) * (h/100); 
+        const pricePerMeter = parseFloat(typeVal.split('|')[1]);
+        
+        let pricePerPiece = (areaPerPiece * pricePerMeter) + cut;
+        if (db.settings.tvaEnabled) pricePerPiece += pricePerPiece * (db.settings.tvaRate / 100);
 
-        cart.push({ id: 'glass-'+Date.now(), name: `${typeVal.split('|')[0]} (${w}×${h})`, price: total, qty: 1, type: 'glass' });
+               cart.push({ 
+            id: 'glass-'+Date.now(), 
+            name: typeVal.split('|')[0], 
+            width: w, 
+            height: h, 
+            area: areaPerPiece, 
+            basePrice: pricePerPiece, // <--- سعر القطعة الثابت (لا يتغير)
+            price: pricePerPiece,     // السعر الإجمالي (سيتغير مع الكمية)
+            qty: qty,             
+            type: 'glass' 
+        });
+        
         updateCartUI();
         
-        document.getElementById('pos-width').value = ''; document.getElementById('pos-height').value = '';
-        document.getElementById('pos-qty').value = '1'; document.getElementById('pos-cut-cost').value = '0';
+        document.getElementById('pos-width').value = ''; 
+        document.getElementById('pos-height').value = '';
+        document.getElementById('pos-qty').value = '1'; 
+        document.getElementById('pos-cut-cost').value = '0';
         document.getElementById('glass-preview-price').innerText = '0';
     }
 
@@ -1015,7 +1014,9 @@
         const countBadge = document.getElementById('cart-badge-count');
         const itemsContainer = document.getElementById('cart-items-container');
         const totalEl = document.getElementById('cart-total-amount');
-        const totalPrice = cart.reduce((s, i) => s + (i.price * i.qty), 0);
+        
+        // حساب الإجمالي (نجمع أسعار القطع المضروبة في كمياتها)
+        const totalPrice = cart.reduce((s, i) => s + i.price, 0);  // <--- تعديل: لأن item.price أصبح يمثل الإجمالي لكل قطعة
         
         if (countBadge) countBadge.textContent = cart.reduce((s, i) => s + i.qty, 0);
         if (totalEl) totalEl.innerHTML = `${totalPrice.toLocaleString()} <span style="font-size: 12px; color: #6b7280;">${db.settings.currency}</span>`;
@@ -1023,30 +1024,52 @@
         
         if (cart.length === 0) { itemsContainer.innerHTML = `<div style="text-align: center; color: #9ca3af; padding: 20px;">السلة فارغة</div>`; return; }
         
-        itemsContainer.innerHTML = cart.map(item => `
+        itemsContainer.innerHTML = cart.map(item => {
+            // نعرض السعر الأساسي الثابت (أو سعر المنتج إذا كان إكسسواراً)
+            const displayUnitPrice = item.basePrice ? item.basePrice : (item.type === 'product' ? db.products.find(p=>p.id===item.id).price : item.price);
+            
+            return `
             <div style="padding: 12px 0; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center;">
-                <div style="flex: 1;"><div style="font-weight: 700; color: #1f2937; font-size: 13px;">${item.name}</div><div style="font-size: 11px; color: #6b7280;">${item.price.toLocaleString()} دج</div></div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; color: #1f2937; font-size: 13px;">${item.name} ${item.width ? `(${item.width}×${item.height})` : ''}</div>
+                    <div style="font-size: 11px; color: #6b7280;">سعر القطعة: ${displayUnitPrice.toLocaleString()} دج</div>
+                </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <button onclick="changeCartQty('${item.id}', -1)" style="width: 28px; height: 28px; border-radius: 8px; background: #f3f4f6; border: none; font-weight: 700;">-</button>
+                    <button onclick="changeCartQty('${item.id}', -1)" style="width: 28px; height: 28px; border-radius: 8px; background: #f3f4f6; border: none; font-weight: 700; cursor:pointer;">-</button>
                     <span style="font-weight: 700; min-width: 20px; text-align: center;">${item.qty}</span>
-                    ${item.type === 'product' ? `<button onclick="changeCartQty('${item.id}', 1)" style="width: 28px; height: 28px; border-radius: 8px; background: #dbeafe; color: #1e40af; border: none; font-weight: 700;">+</button>` : ''}
+                    <button onclick="changeCartQty('${item.id}', 1)" style="width: 28px; height: 28px; border-radius: 8px; background: #dbeafe; color: #1e40af; border: none; font-weight: 700; cursor:pointer;">+</button>
+                    <button onclick="removeFromCart('${item.id}')" style="width: 28px; height: 28px; border-radius: 8px; background: #fee2e2; color: #dc2626; border: none; cursor:pointer;"><i class="fa-solid fa-trash" style="font-size:12px;"></i></button>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
     }
-
     function changeCartQty(id, delta) {
         const item = cart.find(i => i.id === id);
         if (!item) return;
-        if (item.type === 'product') {
+        
+        // زيادة أو نقصان الكمية فقط
+        item.qty += delta;
+        
+        // تحديث السعر الإجمالي للقطعة بناءً على السعر الأساسي الثابت
+        if (item.basePrice) {
+            item.price = item.basePrice * item.qty;
+        } else if (item.type === 'product') {
+            // للإكسسوارات (إذا لم يكن هناك basePrice)
             const product = db.products.find(p => p.id === id);
-            item.qty += delta;
             if (item.qty > product.stock) { item.qty = product.stock; showToast('الكمية غير متوفرة', 'warning'); }
+            item.price = product.price * item.qty; // تحديث السعر الإجمالي
         }
-        if (item.qty <= 0) cart = cart.filter(i => i.id !== id);
+        
+        if (item.qty <= 0) {
+            cart = cart.filter(i => i.id !== id);
+        }
         updateCartUI();
     }
-
+    function removeFromCart(id) {
+        cart = cart.filter(i => i.id !== id);
+        updateCartUI();
+    }
     function clearCart() { cart = []; updateCartUI(); }
     function toggleCartSheet() {
         const sheet = document.getElementById('cart-sheet');
@@ -1055,8 +1078,10 @@
 
     function checkoutCart() {
         if (cart.length === 0) { showToast('السلة فارغة', 'warning'); return; }
-        const totalPrice = cart.reduce((s, i) => s + (i.price * i.qty), 0);
-        const clientId = document.getElementById('pos-client-select').value;
+        
+        // تم تعديل هذا السطر لحل مشكلة الضرب
+        const totalPrice = cart.reduce((s, i) => s + i.price, 0); 
+       const clientId = document.getElementById('pos-client-select') ? document.getElementById('pos-client-select').value : "";
 
         openModal('إتمام البيع', `
             <form onsubmit="finalizeSale(event, ${totalPrice}, '${cart.map(i => i.name).join(', ').replace(/'/g, "\\'")}', '${clientId}')">
@@ -1069,7 +1094,7 @@
                 </div>
                 <div id="debt-client-container" style="display: none; margin-bottom: 16px;">
                     <label>اختر الزبون</label>
-                    <select id="debt-client-id" ${!clientId ? '' : ''}>
+                    <select id="debt-client-id">
                         ${db.members.map(m => `<option value="${m.id}" ${m.id === clientId ? 'selected' : ''}>${m.name}</option>`).join('')}
                     </select>
                 </div>
@@ -1118,7 +1143,6 @@
             paidAmount = total;
         }
 
-        // خصم الكميات من المخزون
         cart.forEach(item => { 
             if (item.type === 'product') {
                 const p = db.products.find(prod => prod.id === item.id); 
@@ -1137,7 +1161,7 @@
             paid: paidAmount,
             remaining: remainingAmount,
             initialBalance: initialBalance,
-            items: JSON.parse(JSON.stringify(cart)) // <--- هذا هو السطر السحري لحفظ القطع
+            items: JSON.parse(JSON.stringify(cart))
         };
 
         db.payments.unshift(saleData);
@@ -1173,155 +1197,166 @@
         processSale(total, details, clientId, false);
     }
 
-    function finalizeAndPrint(e, total, details) {
+      function finalizeAndPrint(e, total, details) {
         e.preventDefault();
-        processSale(total, details, document.getElementById('pos-client-select').value, true);
+        // التحقق من وجود القائمة المنسدلة قبل قراءة قيمتها
+        const clientSelect = document.getElementById('pos-client-select');
+        const clientId = clientSelect ? clientSelect.value : "";
+        
+        processSale(total, details, clientId, true);
     }
 
-    // --- الطباعة الاحترافية ---
-function printInvoice(sale) {
-    let clientName = "Client Divers";
-    if (sale.clientId) {
-        const client = db.members.find(m => m.id === sale.clientId);
-        if (client) clientName = client.name;
-    }
+    function printInvoice(sale) {
+        let clientName = "Client Divers";
+        if (sale.clientId) {
+            const client = db.members.find(m => m.id === sale.clientId);
+            if (client) clientName = client.name;
+        }
 
-    let rowsHtml = '';
-    
-    if (sale.items && sale.items.length > 0) {
-        sale.items.forEach(item => {
-            let areaStr = '-';
-            if (item.area) {
-                areaStr = (item.area * item.qty).toFixed(3);
-            }
-            let unitPrice = (item.price / item.qty).toFixed(2);
-            let dimensionStr = (item.width && item.height) ? `${item.width}×${item.height}` : '-';
+        let rowsHtml = '';
+        
+        if (sale.items && sale.items.length > 0) {
+            sale.items.forEach(item => {
+                let areaStr = '-';
+                let dimensionStr = '-';
+                let displayName = item.name;
 
-            rowsHtml += `
-                <tr>
-                    <td style="border: 1px solid #000; padding: 8px; text-align: right;">${item.name}</td>
-                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${dimensionStr}</td>
-                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${areaStr}</td>
-                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${item.qty}</td>
-                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${unitPrice}</td>
-                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${item.price.toFixed(2)}</td>
-                </tr>
-            `;
-        });
-    } else {
-        rowsHtml = `<tr><td style="border: 1px solid #000; padding: 8px;" colspan="6">${sale.details}</td></tr>`;
-    }
+                // إذا كانت البيانات الجديدة موجودة (تم البيع بعد التحديث)
+                if (item.width && item.height) {
+                    dimensionStr = `${item.width} × ${item.height}`;
+                    areaStr = (item.area * item.qty).toFixed(2);
+                } 
+                // إذا كانت فاتورة قديمة (نستخرج المقاسات من الاسم)
+                else if (item.name && item.name.includes('(') && item.name.includes(')')) {
+                    const match = item.name.match(/\((.*?)\)/);
+                    if (match) {
+                        dimensionStr = match[1].replace('x', ' × ');
+                        displayName = item.name.replace(/\(.*?\)/, '').trim(); // مسح المقاس من الاسم
+                    }
+                }
 
-    // جلب اسم الفاتورة من الإعدادات (افتراضياً FACTURE)
-    const invoiceTitle = db.settings.invoiceTitle || 'FACTURE';
-    
-    // استخراج الرقم الصافي فقط (إزالة أي حروف مثل INV- إن وجدت)
-    // نأخذ الجزء الأخير من الـ ID أو نستخدمه كما هو
-    let rawNumber = sale.id;
-    if (rawNumber.includes('-')) {
-        // إذا كان الرقم يحتوي على شُرط، نأخذ آخر جزء (الرقم فقط)
-        rawNumber = rawNumber.split('-').pop(); 
-    }
+                let unitPrice = (item.price / item.qty).toFixed(2);
 
-    // تنظيف بيانات الورشة من القيم الفارغة أو الأصفار
-    const shopAddress = (db.settings.address && db.settings.address !== '0') ? db.settings.address : '';
-    const shopPhone = (db.settings.phone && db.settings.phone !== '0') ? db.settings.phone : '';
-
-    const invoiceHtml = `
-        <!DOCTYPE html>
-        <html dir="ltr">
-        <head>
-            <title>${invoiceTitle}</title>
-            <style>
-                @page { margin: 0; size: auto; }
-                body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
-                .top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-                .shop-info { text-align: left; font-size: 13px; line-height: 1.6; }
-                .shop-info h1 { margin: 0 0 6px 0; font-size: 22px; font-weight: bold; }
-                .invoice-number { text-align: center; font-size: 15px; font-weight: bold; }
-                .invoice-date { text-align: right; font-size: 13px; font-weight: bold; }
-                .divider { border-top: 2px solid #000; margin: 15px 0 20px 0; }
-                .client-row { margin-bottom: 20px; font-size: 14px; }
-                .main-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-                .main-table th { border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; background: #fff; }
-                .summary-table { width: 40%; float: right; border-collapse: collapse; }
-                .summary-table td { border: 1px solid #000; padding: 8px; font-weight: bold; }
-            </style>
-        </head>
-        <body>
-            <div class="top-row">
-                <div class="shop-info">
-                    <h1>${db.settings.gymName}</h1>
-                    ${shopAddress ? `<div>${shopAddress}</div>` : ''}
-                    ${shopPhone ? `<div>${shopPhone}</div>` : ''}
-                </div>
-                <div class="invoice-number">
-                    ${invoiceTitle} N°: ${rawNumber}
-                </div>
-                <div class="invoice-date">
-                    Date: ${sale.date}
-                </div>
-            </div>
-            <div class="divider"></div>
-            <div class="client-row">
-                <strong>Client:</strong> ${clientName}
-            </div>
-
-            <table class="main-table">
-                <thead>
+                rowsHtml += `
                     <tr>
-                        <th>DESIGNATION</th>
-                        <th>DIMENSION</th>
-                        <th>NOMBRE[M]</th>
-                        <th>QUANTITE</th>
-                        <th>PRIX UNIT</th>
-                        <th>MONTANT</th>
+                        <td style="border: 1px solid #000; padding: 8px; text-align: right;">${displayName}</td>
+                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${dimensionStr}</td>
+                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${areaStr}</td>
+                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${item.qty}</td>
+                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${unitPrice}</td>
+                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${item.price.toFixed(2)}</td>
                     </tr>
-                </thead>
-                <tbody>${rowsHtml}</tbody>
-            </table>
+                `;
+            });
+        } else {
+            rowsHtml = `<tr><td style="border: 1px solid #000; padding: 8px;" colspan="6">${sale.details}</td></tr>`;
+        }
 
-            <table class="summary-table">
-                <tr>
-                    <td style="text-align: left; width: 50%;">SOLDE UNITAL</td>
-                    <td style="text-align: left;">${(sale.initialBalance || 0).toFixed(2)} DZD</td>
-                </tr>
-                <tr>
-                    <td style="text-align: left;">VERSEMENT</td>
-                    <td style="text-align: left;">${(sale.paid || 0).toFixed(2)} DZD</td>
-                </tr>
-                <tr>
-                    <td style="text-align: left;">TOTAL</td>
-                    <td style="text-align: left;">${sale.amount.toFixed(2)} DZD</td>
-                </tr>
-            </table>
-        </body>
-        </html>
-    `;
+        const invoiceTitle = db.settings.invoiceTitle || 'FACTURE';
+        
+        let rawNumber = sale.id;
+        if (rawNumber.includes('-')) {
+            rawNumber = rawNumber.split('-').pop(); 
+        }
 
-    let printFrame = document.getElementById('print-frame');
-    if (!printFrame) {
-        printFrame = document.createElement('iframe');
-        printFrame.id = 'print-frame';
-        printFrame.style.position = 'absolute';
-        printFrame.style.width = '0';
-        printFrame.style.height = '0';
-        printFrame.style.border = 'none';
-        document.body.appendChild(printFrame);
+        const shopAddress = (db.settings.address && db.settings.address !== '0') ? db.settings.address : '';
+        const shopPhone = (db.settings.phone && db.settings.phone !== '0') ? db.settings.phone : '';
+
+        const invoiceHtml = `
+            <!DOCTYPE html>
+            <html dir="ltr">
+            <head>
+                <meta charset="UTF-8">
+                <title>${invoiceTitle}</title>
+                <style>
+                    @page { margin: 0; size: auto; }
+                    body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
+                    .top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+                    .shop-info { text-align: left; font-size: 13px; line-height: 1.6; }
+                    .shop-info h1 { margin: 0 0 6px 0; font-size: 22px; font-weight: bold; }
+                    .invoice-number { text-align: center; font-size: 15px; font-weight: bold; }
+                    .invoice-date { text-align: right; font-size: 13px; font-weight: bold; }
+                    .divider { border-top: 2px solid #000; margin: 15px 0 20px 0; }
+                    .client-row { margin-bottom: 20px; font-size: 14px; }
+                    .main-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                    .main-table th { border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; background: #fff; }
+                    .summary-table { width: 40%; float: right; border-collapse: collapse; }
+                    .summary-table td { border: 1px solid #000; padding: 8px; font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <div class="top-row">
+                    <div class="shop-info">
+                        <h1>${db.settings.gymName}</h1>
+                        ${shopAddress ? `<div>${shopAddress}</div>` : ''}
+                        ${shopPhone ? `<div>${shopPhone}</div>` : ''}
+                    </div>
+                    <div class="invoice-number">
+                        ${invoiceTitle} N°: ${rawNumber}
+                    </div>
+                    <div class="invoice-date">
+                        Date: ${sale.date}
+                    </div>
+                </div>
+                <div class="divider"></div>
+                <div class="client-row">
+                    <strong>Client:</strong> ${clientName}
+                </div>
+
+                <table class="main-table">
+                    <thead>
+                        <tr>
+                            <th>DESIGNATION</th>
+                            <th>DIMENSION</th>
+                            <th>NOMBRE[M]</th>
+                            <th>QUANTITE</th>
+                            <th>PRIX UNIT</th>
+                            <th>MONTANT</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+
+                <table class="summary-table">
+                    <tr>
+                        <td style="text-align: left; width: 50%;">SOLDE UNITAL</td>
+                        <td style="text-align: left;">${(sale.initialBalance || 0).toFixed(2)} DZD</td>
+                    </tr>
+                    <tr>
+                        <td style="text-align: left;">VERSEMENT</td>
+                        <td style="text-align: left;">${(sale.paid || 0).toFixed(2)} DZD</td>
+                    </tr>
+                    <tr>
+                        <td style="text-align: left;">TOTAL</td>
+                        <td style="text-align: left;">${sale.amount.toFixed(2)} DZD</td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `;
+
+        let printFrame = document.getElementById('print-frame');
+        if (!printFrame) {
+            printFrame = document.createElement('iframe');
+            printFrame.id = 'print-frame';
+            printFrame.style.position = 'absolute';
+            printFrame.style.width = '0';
+            printFrame.style.height = '0';
+            printFrame.style.border = 'none';
+            document.body.appendChild(printFrame);
+        }
+
+        const frameDoc = printFrame.contentWindow.document;
+        frameDoc.open();
+        frameDoc.write(invoiceHtml);
+        frameDoc.close();
+
+        setTimeout(() => {
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+        }, 500);
     }
 
-    const frameDoc = printFrame.contentWindow.document;
-    frameDoc.open();
-    frameDoc.write(invoiceHtml);
-    frameDoc.close();
-
-    setTimeout(() => {
-        printFrame.contentWindow.focus();
-        printFrame.contentWindow.print();
-    }, 500);
-}
-
-    // --- المخزون والأنواع ---
     function renderInventory() {
         const body = document.getElementById('inventory-table-body');
         if (!body) return;
@@ -1411,7 +1446,6 @@ function printInvoice(sale) {
         });
     }
 
-    // --- المبيعات والإعدادات والمستخدمين ---
     function renderPayments() {
         const body = document.getElementById('payments-history-body');
         if (!body) return;
@@ -1423,10 +1457,13 @@ function printInvoice(sale) {
                 if (c) clientName = c.name;
             }
             
-            // زر الطباعة يظهر فقط للفواتير (وليس للدفعات)
             let actionBtn = "";
+            // أزرار الطباعة والحذف تظهر فقط للفواتير (وليس للدفعات)
             if (p.type === 'نقدي' || p.type === 'دين') {
-                actionBtn = `<button class="btn btn-outline btn-sm" onclick='reprintInvoice(${JSON.stringify(p).replace(/'/g, "&#39;")})' style="padding: 4px 8px; font-size: 11px;"><i class="fa-solid fa-print"></i> طباعة</button>`;
+                actionBtn = `
+                    <button class="btn btn-outline btn-sm" onclick='reprintInvoice(${JSON.stringify(p).replace(/'/g, "&#39;")})' style="padding: 4px 8px; font-size: 11px; margin-left: 4px;"><i class="fa-solid fa-print"></i> طباعة</button>
+                    <button class="btn btn-danger btn-sm admin-only" onclick="deleteSale('${p.id}')" style="padding: 4px 8px; font-size: 11px;"><i class="fa-solid fa-trash"></i></button>
+                `;
             }
 
             return `
@@ -1440,6 +1477,31 @@ function printInvoice(sale) {
                 </tr>
             `;
         }).join('');
+    }
+
+    function deleteSale(id) {
+        showConfirm('حذف الفاتورة', 'هل أنت متأكد من حذف هذه الفاتورة نهائياً؟ سيتم إرجاع الكميات للمخزون.', () => {
+            const sale = db.payments.find(p => p.id === id);
+            if (sale) {
+                // إرجاع الكميات للمخزون إذا كانت إكسسوارات
+                if (sale.items) {
+                    sale.items.forEach(item => {
+                        if (item.type === 'product') {
+                            const p = db.products.find(prod => prod.id === item.id);
+                            if (p) p.stock += item.qty;
+                        }
+                    });
+                }
+                // حذف الدفعات المرتبطة بهذه الفاتورة إن وجدت (في حالة الدين)
+                db.payments = db.payments.filter(p => p.id !== id && p.details !== `دفعة أولى لفاتورة ${id}`);
+                
+                saveDB();
+                renderPayments();
+                renderInventory();
+                renderDashboard();
+                showToast('تم حذف الفاتورة وإرجاع المخزون', 'success');
+            }
+        });
     }
 
     function reprintInvoice(sale) {
@@ -1593,7 +1655,6 @@ function printInvoice(sale) {
         container.innerHTML = images.map((img, i) => `<div class="bg-slide ${i===0?'active':''}" style="background-image: url('${img}')"></div>`).join('');
     }
 
-    // --- التهيئة النهائية ---
     checkUserSession();
 
 </script>
