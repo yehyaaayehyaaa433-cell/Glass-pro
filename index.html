@@ -1015,18 +1015,26 @@
         const itemsContainer = document.getElementById('cart-items-container');
         const totalEl = document.getElementById('cart-total-amount');
         
-        // حساب الإجمالي (نجمع أسعار القطع المضروبة في كمياتها)
-        const totalPrice = cart.reduce((s, i) => s + i.price, 0);  // <--- تعديل: لأن item.price أصبح يمثل الإجمالي لكل قطعة
+        // 1. تحديث إجمالي السعر (نضرب السعر الأساسي للقطعة × الكمية)
+        const totalPrice = cart.reduce((s, i) => {
+            // إذا كان زجاج نستخدم basePrice، وإلا نستخدم السعر العادي للمنتج
+            const unitPrice = i.type === 'glass' ? i.basePrice : i.price;
+            return s + (unitPrice * i.qty);
+        }, 0);
         
         if (countBadge) countBadge.textContent = cart.reduce((s, i) => s + i.qty, 0);
         if (totalEl) totalEl.innerHTML = `${totalPrice.toLocaleString()} <span style="font-size: 12px; color: #6b7280;">${db.settings.currency}</span>`;
+        
         if (!itemsContainer) return;
         
-        if (cart.length === 0) { itemsContainer.innerHTML = `<div style="text-align: center; color: #9ca3af; padding: 20px;">السلة فارغة</div>`; return; }
+        if (cart.length === 0) { 
+            itemsContainer.innerHTML = `<div style="text-align: center; color: #9ca3af; padding: 20px;">السلة فارغة</div>`; 
+            return; 
+        }
         
         itemsContainer.innerHTML = cart.map(item => {
-            // نعرض السعر الأساسي الثابت (أو سعر المنتج إذا كان إكسسواراً)
-            const displayUnitPrice = item.basePrice ? item.basePrice : (item.type === 'product' ? db.products.find(p=>p.id===item.id).price : item.price);
+            // 2. عرض سعر القطعة الواحدة الثابت (basePrice)
+            const displayUnitPrice = item.type === 'glass' ? item.basePrice : item.price;
             
             return `
             <div style="padding: 12px 0; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center;">
@@ -1051,19 +1059,11 @@
         // زيادة أو نقصان الكمية فقط
         item.qty += delta;
         
-        // تحديث السعر الإجمالي للقطعة بناءً على السعر الأساسي الثابت
-        if (item.basePrice) {
-            item.price = item.basePrice * item.qty;
-        } else if (item.type === 'product') {
-            // للإكسسوارات (إذا لم يكن هناك basePrice)
-            const product = db.products.find(p => p.id === id);
-            if (item.qty > product.stock) { item.qty = product.stock; showToast('الكمية غير متوفرة', 'warning'); }
-            item.price = product.price * item.qty; // تحديث السعر الإجمالي
-        }
-        
+        // إذا وصلت الكمية لصفر، نحذفها
         if (item.qty <= 0) {
             cart = cart.filter(i => i.id !== id);
         }
+        
         updateCartUI();
     }
     function removeFromCart(id) {
@@ -1080,7 +1080,7 @@
         if (cart.length === 0) { showToast('السلة فارغة', 'warning'); return; }
         
         // تم تعديل هذا السطر لحل مشكلة الضرب
-        const totalPrice = cart.reduce((s, i) => s + i.price, 0); 
+       const totalPrice = cart.reduce((s, i) => s + (i.price * i.qty), 0); 
        const clientId = document.getElementById('pos-client-select') ? document.getElementById('pos-client-select').value : "";
 
         openModal('إتمام البيع', `
@@ -1129,13 +1129,17 @@
         let finalClientId = null;
         let paidAmount = 0;
         let remainingAmount = 0;
-        let initialBalance = 0;
+        let oldDebtAmount = 0; // متغير جديد لحفظ الدين القديم
 
         if (method === 'debt') {
             finalClientId = document.getElementById('debt-client-id').value;
             if (!finalClientId) { showToast('اختر زبون', 'warning'); return false; }
             
-            initialBalance = parseFloat(document.getElementById('initial-balance')?.value) || 0;
+            // جلب الدين القديم للزبون قبل إضافة الفاتورة الجديدة
+            const oldDebts = db.payments.filter(p => p.type === 'دين' && p.clientId === finalClientId).reduce((s, p) => s + p.amount, 0);
+            const oldPaid = db.payments.filter(p => p.type === 'تسديد دين' && p.clientId === finalClientId).reduce((s, p) => s + Math.abs(p.amount), 0);
+            oldDebtAmount = Math.max(0, oldDebts - oldPaid);
+
             paidAmount = parseFloat(document.getElementById('partial-payment').value) || 0;
             if (paidAmount > total) paidAmount = total;
             remainingAmount = total - paidAmount;
@@ -1143,6 +1147,7 @@
             paidAmount = total;
         }
 
+        // خصم الكميات من المخزون
         cart.forEach(item => { 
             if (item.type === 'product') {
                 const p = db.products.find(prod => prod.id === item.id); 
@@ -1150,6 +1155,7 @@
             }
         });
 
+        // إنشاء بيانات الفاتورة
         const saleData = { 
             id: 'INV-' + Math.floor(Math.random() * 9000 + 1000), 
             date: new Date().toLocaleString('sv-SE').slice(0, 16), 
@@ -1160,12 +1166,13 @@
             by: db.currentUser.name,
             paid: paidAmount,
             remaining: remainingAmount,
-            initialBalance: initialBalance,
+            oldDebt: oldDebtAmount, // <--- حفظ الدين القديم هنا
             items: JSON.parse(JSON.stringify(cart))
         };
 
         db.payments.unshift(saleData);
         
+        // إذا كان ديناً ودفع جزءاً منه، نسجل الدفعة
         if (method === 'debt' && paidAmount > 0) {
             db.payments.unshift({ 
                 id: 'PAY-' + Date.now(), 
@@ -1206,7 +1213,7 @@
         processSale(total, details, clientId, true);
     }
 
-    function printInvoice(sale) {
+     function printInvoice(sale) {
         let clientName = "Client Divers";
         if (sale.clientId) {
             const client = db.members.find(m => m.id === sale.clientId);
@@ -1216,47 +1223,50 @@
         let rowsHtml = '';
         
         if (sale.items && sale.items.length > 0) {
-            sale.items.forEach(item => {
+            sale.items.forEach((item, index) => { 
                 let areaStr = '-';
                 let dimensionStr = '-';
                 let displayName = item.name;
 
-                // إذا كانت البيانات الجديدة موجودة (تم البيع بعد التحديث)
                 if (item.width && item.height) {
                     dimensionStr = `${item.width} × ${item.height}`;
                     areaStr = (item.area * item.qty).toFixed(2);
-                } 
-                // إذا كانت فاتورة قديمة (نستخرج المقاسات من الاسم)
-                else if (item.name && item.name.includes('(') && item.name.includes(')')) {
+                } else if (item.name && item.name.includes('(') && item.name.includes(')')) {
                     const match = item.name.match(/\((.*?)\)/);
                     if (match) {
                         dimensionStr = match[1].replace('x', ' × ');
-                        displayName = item.name.replace(/\(.*?\)/, '').trim(); // مسح المقاس من الاسم
+                        displayName = item.name.replace(/\(.*?\)/, '').trim();
                     }
                 }
 
-                let unitPrice = (item.price / item.qty).toFixed(2);
+                // حساب سعر الوحدة بناءً على السعر الأساسي الثابت
+                let unitPriceVal = item.type === 'glass' ? item.basePrice : (item.price / item.qty);
+                let unitPriceStr = unitPriceVal.toFixed(2);
 
-                               // حساب سعر المتر المربع (السعر الإجمالي للقطعة مقسوماً على مساحتها)
+                // حساب سعر المتر المربع بناءً على سعر الوحدة
                 let pricePerM2Str = '-';
                 if (item.area && item.area > 0) {
-                    pricePerM2Str = (item.price / item.qty / item.area).toFixed(2);
+                    pricePerM2Str = (unitPriceVal / item.area).toFixed(2);
                 }
+
+                // حساب الإجمالي الفعلي لهذا السطر (سعر الوحدة × الكمية)
+                let totalLineAmount = (unitPriceVal * item.qty).toFixed(2);
 
                 rowsHtml += `
                     <tr>
+                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${index + 1}</td>
                         <td style="border: 1px solid #000; padding: 8px; text-align: right;">${displayName}</td>
                         <td style="border: 1px solid #000; padding: 8px; text-align: center;">${dimensionStr}</td>
                         <td style="border: 1px solid #000; padding: 8px; text-align: center;">${areaStr}</td>
                         <td style="border: 1px solid #000; padding: 8px; text-align: center;">${item.qty}</td>
-                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${pricePerM2Str}</td> <!-- العمود الجديد -->
-                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${unitPrice}</td>
-                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${item.price.toFixed(2)}</td>
+                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${pricePerM2Str}</td>
+                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${unitPriceStr}</td>
+                        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${totalLineAmount}</td>
                     </tr>
                 `;
             });
         } else {
-            rowsHtml = `<tr><td style="border: 1px solid #000; padding: 8px;" colspan="6">${sale.details}</td></tr>`;
+            rowsHtml = `<tr><td style="border: 1px solid #000; padding: 8px;" colspan="8">${sale.details}</td></tr>`;
         }
 
         const invoiceTitle = db.settings.invoiceTitle || 'FACTURE';
@@ -1286,7 +1296,7 @@
                     .divider { border-top: 2px solid #000; margin: 15px 0 20px 0; }
                     .client-row { margin-bottom: 20px; font-size: 14px; }
                     .main-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-                    .main-table th { border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; background: #fff; }
+                    .main-table th { border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; background: #fff; font-size: 12px;}
                     .summary-table { width: 40%; float: right; border-collapse: collapse; }
                     .summary-table td { border: 1px solid #000; padding: 8px; font-weight: bold; }
                 </style>
@@ -1310,15 +1320,16 @@
                     <strong>Client:</strong> ${clientName}
                 </div>
 
-                                <table class="main-table">
+                <table class="main-table">
                     <thead>
                         <tr>
+                            <th style="width: 5%;">N°</th>
                             <th style="width: 25%;">DESIGNATION</th>
                             <th style="width: 12%;">DIMENSION</th>
                             <th style="width: 10%;">NOMBRE[M]</th>
                             <th style="width: 8%;">QTE</th>
-                            <th style="width: 15%;">PRIX m²</th> <!-- العمود الجديد -->
-                            <th style="width: 15%;">PRIX UNIT</th>
+                            <th style="width: 13%;">PRIX m²</th>
+                            <th style="width: 12%;">PRIX UNIT</th>
                             <th style="width: 15%;">MONTANT</th>
                         </tr>
                     </thead>
@@ -1327,16 +1338,23 @@
 
                 <table class="summary-table">
                     <tr>
-                        <td style="text-align: left; width: 50%;">SOLDE UNITAL</td>
-                        <td style="text-align: left;">${(sale.initialBalance || 0).toFixed(2)} DZD</td>
+                        <td style="text-align: left; width: 50%; font-weight: bold;">SOLDE UNITAL</td>
+                        <td style="text-align: left; font-weight: bold;">${sale.amount.toFixed(2)} DZD</td>
                     </tr>
                     <tr>
-                        <td style="text-align: left;">VERSEMENT</td>
-                        <td style="text-align: left;">${(sale.paid || 0).toFixed(2)} DZD</td>
+                        <td style="text-align: left; font-weight: bold;">VERSEMENT</td>
+                        <td style="text-align: left; font-weight: bold;">${(sale.paid || 0).toFixed(2)} DZD</td>
                     </tr>
                     <tr>
-                        <td style="text-align: left;">TOTAL</td>
-                        <td style="text-align: left;">${sale.amount.toFixed(2)} DZD</td>
+                        <td style="text-align: left; color: #dc2626; font-weight: bold;">DETTE RESTANTE</td>
+                        <td style="text-align: left; color: #dc2626; font-weight: bold;">${(sale.oldDebt || 0).toFixed(2)} DZD</td>
+                    </tr>
+                    <tr>
+                        <td style="text-align: left; background-color: #f3f4f6; font-weight: 900;">TOTAL</td>
+                        <td style="text-align: left; background-color: #f3f4f6; font-weight: 900;">
+                            <!-- تم استخدام Math.abs وإضافة الإشارة السالبة يدوياً -->
+                            - ${Math.abs((sale.amount + (sale.oldDebt || 0)) - (sale.paid || 0)).toFixed(2)} DZD
+                        </td>
                     </tr>
                 </table>
             </body>
@@ -1363,8 +1381,7 @@
             printFrame.contentWindow.focus();
             printFrame.contentWindow.print();
         }, 500);
-    }
-
+    }    
     function renderInventory() {
         const body = document.getElementById('inventory-table-body');
         if (!body) return;
