@@ -879,9 +879,17 @@
 
     function payDebt(clientId) {
         const client = db.members.find(m => m.id === clientId);
-        const debts = db.payments.filter(p => p.type === 'دين' && p.clientId === clientId).reduce((s, p) => s + p.amount, 0);
-        const payments = db.payments.filter(p => p.type === 'تسديد دين' && p.clientId === clientId).reduce((s, p) => s + Math.abs(p.amount), 0);
-        const totalDebt = Math.max(0, debts - payments);
+        
+        // حساب الدين بناءً على الفواتير المتبقية
+        let totalDebt = 0;
+        db.payments.forEach(p => {
+            if (p.clientId === clientId && p.type === 'دين') {
+                const remaining = (p.amount + (p.oldDebt || 0)) - (p.paid || 0);
+                totalDebt += remaining;
+            }
+        });
+
+        if (totalDebt < 0) totalDebt = 0;
 
         openModal(`ديون: ${client.name}`, `
             <div style="text-align: center; margin-bottom: 20px;">
@@ -902,19 +910,36 @@
         e.preventDefault();
         const amount = parseFloat(document.getElementById('pay-amount').value);
         if (amount <= 0) return;
+
+        let remainingPayment = amount;
         
-        db.payments.unshift({ 
-            id: 'PAY-' + Date.now(), 
-            date: new Date().toLocaleString('sv-SE').slice(0, 16), 
-            type: 'تسديد دين', 
-            details: 'دفعة نقدية', 
-            amount: -amount, 
-            clientId: clientId, 
-            by: db.currentUser.name 
-        });
-        
-        saveDB(); closeModal(); renderPayments(); renderDashboard();
-        showToast('✅ تم تسجيل الدفعة', 'success');
+        // نبحث عن فواتير الدين الخاصة بهذا الزبون (الأقدم أولاً)
+        const debts = db.payments.filter(p => p.clientId === clientId && p.type === 'دين').reverse();
+
+        for (let i = 0; i < debts.length; i++) {
+            const sale = debts[i];
+            const saleDebt = (sale.amount + (sale.oldDebt || 0)) - (sale.paid || 0);
+            
+            if (saleDebt > 0) {
+                // إذا كان المبلغ المدفوع يكفي لتصفية هذه الفاتورة
+                if (remainingPayment >= saleDebt) {
+                    sale.paid = (sale.paid || 0) + saleDebt; // نزيد المدفوع ليصبح مساوياً للإجمالي
+                    remainingPayment -= saleDebt;
+                } else {
+                    // إذا كان المبلغ المدفوع لا يكفي، نضيفه للمدفوع وننهي العملية
+                    sale.paid = (sale.paid || 0) + remainingPayment;
+                    remainingPayment = 0;
+                    break;
+                }
+            }
+        }
+
+        saveDB(); 
+        closeModal(); 
+        renderPayments(); 
+        renderDashboard();
+        renderMembers();
+        showToast('✅ تم تسجيل الدفعة وتحديث الفواتير', 'success');
     }
 
     function updateClientSelect() {
@@ -1483,10 +1508,10 @@
             }
             
             let actionBtn = "";
-            // أزرار الطباعة والحذف تظهر فقط للفواتير (وليس للدفعات)
             if (p.type === 'نقدي' || p.type === 'دين') {
                 actionBtn = `
-                    <button class="btn btn-outline btn-sm" onclick='reprintInvoice(${JSON.stringify(p).replace(/'/g, "&#39;")})' style="padding: 4px 8px; font-size: 11px; margin-left: 4px;"><i class="fa-solid fa-print"></i> طباعة</button>
+                    <button class="btn btn-outline btn-sm" onclick='reprintInvoice(${JSON.stringify(p).replace(/'/g, "&#39;")})' style="padding: 4px 8px; font-size: 11px; margin-left: 4px;"><i class="fa-solid fa-print"></i></button>
+                    <button class="btn btn-primary btn-sm admin-only" onclick="openEditInvoiceModal('${p.id}')" style="padding: 4px 8px; font-size: 11px; margin-left: 4px;"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn btn-danger btn-sm admin-only" onclick="deleteSale('${p.id}')" style="padding: 4px 8px; font-size: 11px;"><i class="fa-solid fa-trash"></i></button>
                 `;
             }
@@ -1527,6 +1552,269 @@
                 showToast('تم حذف الفاتورة وإرجاع المخزون', 'success');
             }
         });
+    }
+
+        // فتح نافذة تعديل الفاتورة
+     function openEditInvoiceModal(invoiceId) {
+        const sale = db.payments.find(p => p.id === invoiceId);
+        if (!sale) return;
+
+        let clientsOptions = db.members.map(m => `<option value="${m.id}" ${sale.clientId === m.id ? 'selected' : ''}>${m.name}</option>`).join('');
+        
+        let productsOptions = db.products.filter(p => p.stock > 0).map(p => `<option value="${p.id}">${p.name} (متوفر: ${p.stock}) - ${p.price} دج</option>`).join('');
+        let glassOptions = (db.settings.plans || []).map(p => `<option value="${p.name}|${p.price}">${p.name} (${p.price} دج/م²)</option>`).join('');
+
+        openModal('تعديل الفاتورة بالكامل', `
+            <form onsubmit="saveInvoiceEdit(event, '${invoiceId}')" style="display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>نوع الدفع</label>
+                        <select id="edit-payment-type" onchange="toggleEditClient(this.value)">
+                            <option value="نقدي" ${sale.type === 'نقدي' ? 'selected' : ''}>نقداً</option>
+                            <option value="دين" ${sale.type === 'دين' ? 'selected' : ''}>آجل (دين)</option>
+                        </select>
+                    </div>
+                    <div id="edit-client-container" style="display: ${sale.type === 'دين' ? 'block' : 'none'};">
+                        <label>الزبون</label>
+                        <select id="edit-client-id">
+                            <option value="">-- زبون عابر --</option>
+                            ${clientsOptions}
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>المبلغ المدفوع (Versement)</label>
+                        <input type="number" id="edit-paid-amount" value="${sale.paid || 0}" min="0" step="0.01">
+                    </div>
+                    <div>
+                        <label>الدين القديم (Dette)</label>
+                        <input type="number" id="edit-old-debt" value="${sale.oldDebt || 0}" min="0" step="0.01">
+                    </div>
+                </div>
+
+                <div style="border-top: 1px solid #e5e7eb; margin-top: 10px; padding-top: 10px;">
+                    <label style="font-size: 14px; font-weight: bold; margin-bottom: 10px;">المنتجات الحالية (تعديل الكميات)</label>
+                    <div id="edit-items-container">
+                        ${sale.items.map((item, idx) => `
+                            <div style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center; background: #f9fafb; padding: 8px; border-radius: 8px;">
+                                <input type="text" value="${item.name} ${item.width ? `(${item.width}×${item.height})` : ''}" disabled style="flex: 2; background: #e5e7eb;">
+                                <input type="number" class="edit-qty-input" data-price="${item.type === 'glass' ? item.basePrice : item.price}" oninput="calcEditTotal()" id="edit-item-qty-${idx}" value="${item.qty}" min="0" style="flex: 1;" placeholder="الكمية">
+                                <button type="button" onclick="removeEditItem(${idx})" style="background: #fee2e2; color: #dc2626; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div style="border-top: 1px solid #e5e7eb; margin-top: 10px; padding-top: 10px;">
+                    <label style="font-size: 14px; font-weight: bold; margin-bottom: 10px; color: #059669;">إضافة منتجات جديدة (اختياري)</label>
+                    
+                    <div style="background: #f0fdf4; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+                        <label>إضافة إكسسوار</label>
+                        <div style="display: flex; gap: 5px;">
+                            <select id="add-new-product" style="flex: 2;" onchange="calcEditTotal()">
+                                <option value="">-- اختر منتجاً --</option>
+                                ${productsOptions}
+                            </select>
+                            <input type="number" id="add-new-product-qty" value="1" min="1" style="flex: 1; width: 60px;" oninput="calcEditTotal()" placeholder="الكمية">
+                        </div>
+                    </div>
+
+                    <div style="background: #fffbeb; padding: 10px; border-radius: 8px;">
+                        <label>إضافة زجاج</label>
+                        <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                            <select id="add-new-glass" style="flex: 1; min-width: 100px;" onchange="calcEditTotal()">
+                                <option value="">-- اختر نوع الزجاج --</option>
+                                ${glassOptions}
+                            </select>
+                            <input type="number" id="add-new-glass-w" placeholder="العرض" style="width: 60px; flex: 1;" oninput="calcEditTotal()">
+                            <input type="number" id="add-new-glass-h" placeholder="الطول" style="width: 60px; flex: 1;" oninput="calcEditTotal()">
+                            <input type="number" id="add-new-glass-qty" value="1" min="1" style="width: 50px; flex: 1;" oninput="calcEditTotal()" placeholder="الكمية">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- مربع المجموع الإجمالي الجديد -->
+                <div style="background: #e0e7ff; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 2px solid #6366f1; margin-top: 10px;">
+                    <span style="font-weight: 800; font-size: 16px; color: #3730a3;">المجموع الإجمالي الجديد:</span>
+                    <span id="edit-invoice-total-display" style="font-weight: 900; font-size: 20px; color: #4338ca;">0.00 DZD</span>
+                </div>
+
+                <button type="submit" class="btn btn-success" style="width: 100%; padding: 14px;">حفظ التعديلات وإعادة حساب المخزون</button>
+            </form>
+        `);
+        
+        // استدعاء دالة الحساب فور فتح النافذة
+        setTimeout(calcEditTotal, 100);
+    }
+
+    function calcEditTotal() {
+        let total = 0;
+
+        // 1. حساب المنتجات القديمة (الموجودة في الفاتورة)
+        document.querySelectorAll('.edit-qty-input').forEach(input => {
+            const price = parseFloat(input.getAttribute('data-price')) || 0;
+            const qty = parseInt(input.value) || 0;
+            total += (price * qty);
+        });
+
+        // 2. حساب الإكسسوار الجديد (إذا تم اختياره)
+        const newProductSelect = document.getElementById('add-new-product');
+        const newProductQty = parseInt(document.getElementById('add-new-product-qty').value) || 0;
+        if (newProductSelect.value && newProductQty > 0) {
+            // نبحث عن سعر المنتج من قاعدة البيانات
+            const prod = db.products.find(p => p.id === newProductSelect.value);
+            if (prod) total += (prod.price * newProductQty);
+        }
+
+        // 3. حساب الزجاج الجديد (إذا تم اختياره)
+        const newGlassSelect = document.getElementById('add-new-glass');
+        const newGlassW = parseFloat(document.getElementById('add-new-glass-w').value) || 0;
+        const newGlassH = parseFloat(document.getElementById('add-new-glass-h').value) || 0;
+        const newGlassQty = parseInt(document.getElementById('add-new-glass-qty').value) || 0;
+        
+        if (newGlassSelect.value && newGlassW > 0 && newGlassH > 0 && newGlassQty > 0) {
+            const pricePerM = parseFloat(newGlassSelect.value.split('|')[1]);
+            const area = (newGlassW / 100) * (newGlassH / 100);
+            total += (area * pricePerM * newGlassQty);
+        }
+
+        // عرض المجموع في المربع الأزرق
+        const display = document.getElementById('edit-invoice-total-display');
+        if (display) {
+            display.innerText = total.toFixed(2) + ' DZD';
+        }
+    }
+
+    // تغيير شكل النافذة عند اختيار دين
+    function toggleEditClient(val) {
+        document.getElementById('edit-client-container').style.display = val === 'دين' ? 'block' : 'none';
+    }
+
+    // حفظ التعديلات في قاعدة البيانات
+    function saveInvoiceEdit(e, invoiceId) {
+        e.preventDefault();
+        const saleIndex = db.payments.findIndex(p => p.id === invoiceId);
+        if (saleIndex === -1) return;
+
+        const sale = db.payments[saleIndex];
+        const newType = document.getElementById('edit-payment-type').value;
+        const newClientId = newType === 'دين' ? document.getElementById('edit-client-id').value : null;
+        const newPaid = parseFloat(document.getElementById('edit-paid-amount').value) || 0;
+        const newOldDebt = parseFloat(document.getElementById('edit-old-debt').value) || 0;
+
+        // 1. إرجاع الكميات القديمة إلى المخزون
+        if (sale.items) {
+            sale.items.forEach(item => {
+                if (item.type === 'product') {
+                    const p = db.products.find(prod => prod.id === item.id);
+                    if (p) p.stock += item.qty; // إرجاع
+                }
+            });
+        }
+
+        // 2. قراءة الكميات الجديدة وتحديث المخزون (المنتجات الموجودة مسبقاً)
+        let updatedItems = [];
+        
+        sale.items.forEach((item, idx) => {
+            const newQtyInput = document.getElementById(`edit-item-qty-${idx}`);
+            if (newQtyInput) {
+                const newQty = parseInt(newQtyInput.value) || 0;
+                if (newQty > 0) {
+                    updatedItems.push({ ...item, qty: newQty });
+                    
+                    // خصم الكمية الجديدة من المخزون
+                    if (item.type === 'product') {
+                        const p = db.products.find(prod => prod.id === item.id);
+                        if (p) p.stock -= newQty;
+                    }
+                }
+            }
+        });
+
+        // 3. إضافة المنتجات الجديدة التي تم اختيارها من القائمة
+        // إضافة إكسسوار جديد
+        const addProductId = document.getElementById('add-new-product').value;
+        const addProductQty = parseInt(document.getElementById('add-new-product-qty').value) || 1;
+        if (addProductId) {
+            const prod = db.products.find(p => p.id === addProductId);
+            if (prod && prod.stock >= addProductQty) {
+                updatedItems.push({
+                    id: prod.id,
+                    name: prod.name,
+                    price: prod.price,
+                    qty: addProductQty,
+                    type: 'product'
+                });
+                prod.stock -= addProductQty; // خصم من المخزون
+            } else {
+                showToast('الكمية المطلوبة غير متوفرة في المخزون للإكسسوار', 'warning');
+            }
+        }
+
+        // إضافة زجاج جديد
+        const addGlassVal = document.getElementById('add-new-glass').value;
+        const addGlassW = parseFloat(document.getElementById('add-new-glass-w').value);
+        const addGlassH = parseFloat(document.getElementById('add-new-glass-h').value);
+        const addGlassQty = parseInt(document.getElementById('add-new-glass-qty').value) || 1;
+        
+        if (addGlassVal && addGlassW && addGlassH) {
+            const glassName = addGlassVal.split('|')[0];
+            const pricePerM = parseFloat(addGlassVal.split('|')[1]);
+            const areaPerPiece = (addGlassW / 100) * (addGlassH / 100);
+            const pricePerPiece = areaPerPiece * pricePerM;
+
+            updatedItems.push({
+                id: 'glass-' + Date.now(),
+                name: glassName,
+                width: addGlassW,
+                height: addGlassH,
+                area: areaPerPiece,
+                basePrice: pricePerPiece,
+                price: pricePerPiece,
+                qty: addGlassQty,
+                type: 'glass'
+            });
+        }
+
+        // 4. تحديث بيانات الفاتورة وحساب الإجمالي الجديد
+        let newTotalAmount = 0;
+        updatedItems.forEach(item => {
+            const unitPrice = item.type === 'glass' ? item.basePrice : item.price;
+            newTotalAmount += (unitPrice * item.qty);
+        });
+
+        sale.type = newType;
+        sale.clientId = newClientId;
+        sale.paid = newPaid;
+        sale.oldDebt = newOldDebt;
+        sale.items = updatedItems;
+        sale.amount = newTotalAmount;
+
+        if (newType === 'دين') {
+            const c = db.members.find(m => m.id === newClientId);
+            sale.details = c ? c.name : 'دين';
+        } else {
+            sale.details = 'بيع نقدي';
+        }
+
+        saveDB();
+        closeModal();
+        renderPayments();
+        renderDashboard();
+        renderInventory(); 
+        renderMembers();   
+        showToast('✅ تم تعديل الفاتورة وإضافة المنتجات بنجاح', 'success');
+    }
+
+    function removeEditItem(index) {
+        // نغير قيمة الكمية إلى 0 لكي يتم تجاهلها في دالة الحفظ
+        const input = document.getElementById(`edit-item-qty-${index}`);
+        if (input) {
+            input.value = 0;
+            input.parentElement.style.display = 'none'; // إخفاء السطر
+        }
     }
 
     function reprintInvoice(sale) {
