@@ -1160,10 +1160,16 @@
             finalClientId = document.getElementById('debt-client-id').value;
             if (!finalClientId) { showToast('اختر زبون', 'warning'); return false; }
             
-            // جلب الدين القديم للزبون قبل إضافة الفاتورة الجديدة
-            const oldDebts = db.payments.filter(p => p.type === 'دين' && p.clientId === finalClientId).reduce((s, p) => s + p.amount, 0);
-            const oldPaid = db.payments.filter(p => p.type === 'تسديد دين' && p.clientId === finalClientId).reduce((s, p) => s + Math.abs(p.amount), 0);
-            oldDebtAmount = Math.max(0, oldDebts - oldPaid);
+            // الحساب الجديد: نجمع المتبقي من كل فاتورة دين سابقة
+            let currentOldDebt = 0;
+            db.payments.forEach(p => {
+                if (p.clientId === finalClientId && p.type === 'دين') {
+                    // المتبقي = (قيمة الفاتورة + الدين القديم) - المدفوع
+                    currentOldDebt += (p.amount + (p.oldDebt || 0)) - (p.paid || 0);
+                }
+            });
+            // إذا كان الرصيد سالباً نجعله صفراً
+            oldDebtAmount = currentOldDebt > 0 ? currentOldDebt : 0;
 
             paidAmount = parseFloat(document.getElementById('partial-payment').value) || 0;
             if (paidAmount > total) paidAmount = total;
