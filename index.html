@@ -832,26 +832,45 @@
         const search = (document.getElementById('member-search')?.value || '').toLowerCase();
         let list = db.members.filter(m => m.name.toLowerCase().includes(search) || m.phone.includes(search));
         
-        if (list.length === 0) { container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #9ca3af; padding: 40px;">لا يوجد زبائن مسجلين</div>`; return; }
+        if (list.length === 0) { 
+            container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #9ca3af; padding: 40px;">لا يوجد زبائن مسجلين</div>`; 
+            return; 
+        }
         
         container.innerHTML = list.map(m => {
             const initials = m.name.trim().split(' ').map(n => n[0]).slice(0,2).join('').toUpperCase();
-            return `<div class="inner-card" style="display: flex; flex-direction: column; gap: 12px;">
-                <div style="display: flex; gap: 12px;">
+            
+            return `
+            <div class="inner-card" style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; gap: 12px; align-items: center;">
                     <div class="avatar-placeholder">${initials}</div>
                     <div style="flex: 1;">
                         <div style="font-weight: 800; font-size: 14px; color: #1f2937;">${m.name}</div>
                         <div style="font-size: 11px; color: #6b7280;"><i class="fa-solid fa-phone"></i> ${m.phone}</div>
                     </div>
                 </div>
-                <div style="display: flex; gap: 6px;">
-                    <button class="btn btn-success" style="flex: 1; padding: 6px; font-size: 11px;" onclick="payDebt('${m.id}')">تسديد دفعة</button>
-                    <button class="btn btn-danger admin-only" style="padding: 6px 10px; font-size: 11px;" onclick="deleteMember('${m.id}')"><i class="fa-solid fa-trash"></i></button>
+                
+                <!-- أزرار التحكم بالزبون -->
+                <div style="display: flex; gap: 6px; margin-top: 4px;">
+                    <!-- زر تسديد دفعة -->
+                    <button class="btn btn-success" style="flex: 1; padding: 8px 4px; font-size: 11px;" onclick="payDebt('${m.id}')">
+                        <i class="fa-solid fa-money-bill-wave"></i> تسديد دفعة
+                    </button>
+                    
+                    <!-- زر الرصيد الافتتاحي (الدين القديم) -->
+                    <button class="btn btn-warning" style="padding: 8px 12px; font-size: 11px;" onclick="openInitialBalanceModal('${m.id}')" title="إضافة دين قديم / رصيد افتتاحي">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                    </button>
+                    
+                    <!-- زر الحذف (للمدير فقط) -->
+                    <button class="btn btn-danger admin-only" style="padding: 8px 12px; font-size: 11px;" onclick="deleteMember('${m.id}')" title="حذف الزبون">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
                 </div>
-            </div>`;
+            </div>
+            `;
         }).join('');
     }
-
     function openMemberModal() {
         openModal('إضافة زبون جديد', `
             <form onsubmit="saveMember(event)" style="display: flex; flex-direction: column; gap: 14px;">
@@ -860,6 +879,73 @@
                 <button type="submit" class="btn btn-success" style="width: 100%; padding: 14px;">حفظ</button>
             </form>
         `);
+    }
+
+        function openInitialBalanceModal(clientId) {
+        const client = db.members.find(m => m.id === clientId);
+        if (!client) return;
+
+        openModal(`رصيد افتتاحي: ${client.name}`, `
+            <form onsubmit="saveInitialBalance(event, '${clientId}')" style="display: flex; flex-direction: column; gap: 14px;">
+                <div style="background: #fffbeb; padding: 10px; border-radius: 8px; font-size: 12px; color: #b45309; margin-bottom: 10px;">
+                    استخدم هذا الخيار لتسجيل حساب قديم للزبون قبل استخدام البرنامج.
+                </div>
+                
+                <div>
+                    <label>نوع الرصيد</label>
+                    <select id="initial-balance-type" required>
+                        <option value="debt">دين قديم (الزبون مدين لنا)</option>
+                        <option value="credit">رصيد دائن (الزبون دفع مسبقاً)</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label>المبلغ (دج)</label>
+                    <input type="number" id="initial-balance-amount" min="1" step="0.01" required placeholder="أدخل المبلغ">
+                </div>
+
+                <button type="submit" class="btn btn-warning" style="width: 100%; padding: 14px;">حفظ الرصيد الافتتاحي</button>
+            </form>
+        `);
+    }
+
+        function saveInitialBalance(e, clientId) {
+        e.preventDefault();
+        const type = document.getElementById('initial-balance-type').value;
+        const amount = parseFloat(document.getElementById('initial-balance-amount').value);
+        
+        if (amount <= 0) return;
+
+        const client = db.members.find(m => m.id === clientId);
+
+        // نقوم بإنشاء فاتورة دين وهمية تحمل الرصيد الافتتاحي
+        const initialSale = {
+            id: 'SOLDE-' + Math.floor(Math.random() * 9000 + 1000),
+            date: new Date().toLocaleString('sv-SE').slice(0, 16),
+            type: type === 'debt' ? 'دين' : 'تسديد دين',
+            details: type === 'debt' ? 'رصيد افتتاحي (دين سابق)' : 'رصيد افتتاحي (دفعة مقدمة)',
+            amount: type === 'debt' ? amount : -amount,
+            clientId: clientId,
+            paid: type === 'debt' ? 0 : amount, // إذا كان رصيداً دائناً، نعتبره مدفوعاً بالكامل
+            oldDebt: 0,
+            by: db.currentUser.name,
+            items: [{
+                name: type === 'debt' ? 'رصيد افتتاحي سابق' : 'دفعة مقدمة سابقة',
+                qty: 1,
+                price: amount,
+                type: 'product' // نعتبرها منتج حتى لا تظهر في تقارير الزجاج
+            }]
+        };
+
+        db.payments.unshift(initialSale);
+        
+        saveDB();
+        closeModal();
+        renderMembers();
+        renderPayments();
+        renderDashboard();
+        
+        showToast('✅ تم إضافة الرصيد الافتتاحي بنجاح', 'success');
     }
 
     function saveMember(e) {
