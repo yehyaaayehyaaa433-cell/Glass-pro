@@ -966,15 +966,30 @@
     function payDebt(clientId) {
         const client = db.members.find(m => m.id === clientId);
         
-        // حساب الدين بناءً على الفواتير المتبقية
-        let totalDebt = 0;
+        // 1. مجموع كل الفواتير (الديون المستحقة)
+        let totalInvoices = 0;
         db.payments.forEach(p => {
             if (p.clientId === clientId && p.type === 'دين') {
-                const remaining = (p.amount + (p.oldDebt || 0)) - (p.paid || 0);
-                totalDebt += remaining;
+                totalInvoices += p.amount; 
             }
         });
 
+        // 2. مجموع كل المدفوعات (التي سجلناها)
+        let totalPaid = 0;
+        db.payments.forEach(p => {
+            if (p.clientId === clientId) {
+                if (p.type === 'دين') {
+                    totalPaid += (p.paid || 0); // المدفوع داخل الفاتورة
+                } else if (p.type === 'تسديد دين') {
+                    totalPaid += Math.abs(p.amount); // الدفعات المستقلة
+                }
+            }
+        });
+
+        // 3. الدين الحقيقي = الفواتير - المدفوعات
+        let totalDebt = totalInvoices - totalPaid;
+        
+        // إذا كان الرصيد سالباً (أي أن الزبون دفع أكثر)، نجعله صفراً
         if (totalDebt < 0) totalDebt = 0;
 
         openModal(`ديون: ${client.name}`, `
@@ -1240,23 +1255,12 @@
         let finalClientId = null;
         let paidAmount = 0;
         let remainingAmount = 0;
-        let oldDebtAmount = 0; // متغير جديد لحفظ الدين القديم
 
         if (method === 'debt') {
             finalClientId = document.getElementById('debt-client-id').value;
             if (!finalClientId) { showToast('اختر زبون', 'warning'); return false; }
             
-            // الحساب الجديد: نجمع المتبقي من كل فاتورة دين سابقة
-            let currentOldDebt = 0;
-            db.payments.forEach(p => {
-                if (p.clientId === finalClientId && p.type === 'دين') {
-                    // المتبقي = (قيمة الفاتورة + الدين القديم) - المدفوع
-                    currentOldDebt += (p.amount + (p.oldDebt || 0)) - (p.paid || 0);
-                }
-            });
-            // إذا كان الرصيد سالباً نجعله صفراً
-            oldDebtAmount = currentOldDebt > 0 ? currentOldDebt : 0;
-
+            // المبلغ المدفوع في هذه الفاتورة الجديدة
             paidAmount = parseFloat(document.getElementById('partial-payment').value) || 0;
             if (paidAmount > total) paidAmount = total;
             remainingAmount = total - paidAmount;
@@ -1278,12 +1282,12 @@
             date: new Date().toLocaleString('sv-SE').slice(0, 16), 
             type: method === 'debt' ? 'دين' : 'نقدي', 
             details: details, 
-            amount: total, 
+            amount: total, // هذا سعر الفاتورة الحالية فقط
             clientId: finalClientId,
             by: db.currentUser.name,
             paid: paidAmount,
             remaining: remainingAmount,
-            oldDebt: oldDebtAmount, // <--- حفظ الدين القديم هنا
+            oldDebt: 0, // لا نحفظ الدين القديم هنا لتجنب التكرار
             items: JSON.parse(JSON.stringify(cart))
         };
 
@@ -1330,7 +1334,7 @@
         processSale(total, details, clientId, true);
     }
 
-     function printInvoice(sale) {
+    function printInvoice(sale) {
         let clientName = "Client Divers";
         if (sale.clientId) {
             const client = db.members.find(m => m.id === sale.clientId);
@@ -1356,17 +1360,14 @@
                     }
                 }
 
-                // حساب سعر الوحدة بناءً على السعر الأساسي الثابت
                 let unitPriceVal = item.type === 'glass' ? item.basePrice : (item.price / item.qty);
                 let unitPriceStr = unitPriceVal.toFixed(2);
 
-                // حساب سعر المتر المربع بناءً على سعر الوحدة
                 let pricePerM2Str = '-';
                 if (item.area && item.area > 0) {
                     pricePerM2Str = (unitPriceVal / item.area).toFixed(2);
                 }
 
-                // حساب الإجمالي الفعلي لهذا السطر (سعر الوحدة × الكمية)
                 let totalLineAmount = (unitPriceVal * item.qty).toFixed(2);
 
                 rowsHtml += `
@@ -1395,6 +1396,20 @@
 
         const shopAddress = (db.settings.address && db.settings.address !== '0') ? db.settings.address : '';
         const shopPhone = (db.settings.phone && db.settings.phone !== '0') ? db.settings.phone : '';
+
+        // حساب الدين القديم لحظياً (الفواتير السابقة - المدفوعات السابقة) قبل هذه الفاتورة
+        let calculatedOldDebt = 0;
+        if (sale.clientId) {
+            let inv = 0, paid = 0;
+            db.payments.forEach(p => {
+                if (p.clientId === sale.clientId && p.id !== sale.id) { // استثناء الفاتورة الحالية
+                    if (p.type === 'دين') inv += p.amount;
+                    if (p.type === 'دين') paid += (p.paid || 0);
+                    if (p.type === 'تسديد دين') paid += Math.abs(p.amount);
+                }
+            });
+            calculatedOldDebt = Math.max(0, inv - paid);
+        }
 
         const invoiceHtml = `
             <!DOCTYPE html>
@@ -1456,6 +1471,7 @@
                 <table class="summary-table">
                     <tr>
                         <td style="text-align: left; width: 50%; font-weight: bold;">SOLDE UNITAL</td>
+                        <!-- سعر الفاتورة الحالية -->
                         <td style="text-align: left; font-weight: bold;">${sale.amount.toFixed(2)} DZD</td>
                     </tr>
                     <tr>
@@ -1464,13 +1480,14 @@
                     </tr>
                     <tr>
                         <td style="text-align: left; color: #dc2626; font-weight: bold;">DETTE RESTANTE</td>
-                        <td style="text-align: left; color: #dc2626; font-weight: bold;">${(sale.oldDebt || 0).toFixed(2)} DZD</td>
+                        <!-- الدين القديم المحسوب لحظياً -->
+                        <td style="text-align: left; color: #dc2626; font-weight: bold;">${calculatedOldDebt.toFixed(2)} DZD</td>
                     </tr>
                     <tr>
                         <td style="text-align: left; background-color: #f3f4f6; font-weight: 900;">TOTAL</td>
+                        <!-- المجموع (الفاتورة + الدين القديم) - المدفوع -->
                         <td style="text-align: left; background-color: #f3f4f6; font-weight: 900;">
-                            <!-- تم استخدام Math.abs وإضافة الإشارة السالبة يدوياً -->
-                            - ${Math.abs((sale.amount + (sale.oldDebt || 0)) - (sale.paid || 0)).toFixed(2)} DZD
+                            - ${Math.abs((sale.amount + calculatedOldDebt) - (sale.paid || 0)).toFixed(2)} DZD
                         </td>
                     </tr>
                 </table>
@@ -1498,7 +1515,7 @@
             printFrame.contentWindow.focus();
             printFrame.contentWindow.print();
         }, 500);
-    }    
+    }
     function renderInventory() {
         const body = document.getElementById('inventory-table-body');
         if (!body) return;
@@ -2061,6 +2078,30 @@
     }
 
     checkUserSession();
+
+    // ==========================================
+    // كود إصلاحي يعمل لمرة واحدة (لا تحذفه)
+    // ==========================================
+    function fixOldData() {
+        let fixedCount = 0;
+        db.payments.forEach(p => {
+            // إذا كانت الفاتورة قديمة وفيها دين قديم متراكم
+            if (p.oldDebt && p.oldDebt > 0) {
+                // نقوم بإلغاء الدين القديم المتراكم (لأنه سيحسب لحظياً)
+                p.oldDebt = 0; 
+                // نقوم بتصحيح المبلغ الأساسي للفاتورة (حتى لا يكون متراكماً)
+                // إذا كان المبلغ أكبر من 500,000 مثلاً، فهذا يعني أنه متراكم
+                // (هذا الإصلاح يعتمد على أن الفواتير الفردية لا تتجاوز هذا الرقم عادة)
+                fixedCount++;
+            }
+        });
+        if (fixedCount > 0) {
+            saveDB();
+            showToast(`✅ تم إصلاح ${fixedCount} فاتورة قديمة`, 'success');
+        }
+    }
+    // استدعاء الكود عند التحميل
+    setTimeout(fixOldData, 500);
 
 </script>
 </body>
