@@ -850,13 +850,18 @@
                     </div>
                 </div>
                 
-                <!-- أزرار التحكم بالزبون -->
+                 <!-- أزرار التحكم بالزبون -->
                 <div style="display: flex; gap: 6px; margin-top: 4px;">
                     <!-- زر تسديد دفعة -->
                     <button class="btn btn-success" style="flex: 1; padding: 8px 4px; font-size: 11px;" onclick="payDebt('${m.id}')">
                         <i class="fa-solid fa-money-bill-wave"></i> تسديد دفعة
                     </button>
                     
+                    <!-- زر تعديل الزبون -->
+                    <button class="btn btn-primary" style="padding: 8px 12px; font-size: 11px;" onclick="openEditMemberModal('${m.id}')" title="تعديل بيانات الزبون">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+
                     <!-- زر الرصيد الافتتاحي (الدين القديم) -->
                     <button class="btn btn-warning" style="padding: 8px 12px; font-size: 11px;" onclick="openInitialBalanceModal('${m.id}')" title="إضافة دين قديم / رصيد افتتاحي">
                         <i class="fa-solid fa-file-invoice-dollar"></i>
@@ -881,7 +886,26 @@
         `);
     }
 
-        function openInitialBalanceModal(clientId) {
+    function openEditMemberModal(clientId) {
+        const client = db.members.find(m => m.id === clientId);
+        if (!client) return;
+
+        openModal('تعديل بيانات الزبون', `
+            <form onsubmit="saveMemberEdit(event, '${clientId}')" style="display: flex; flex-direction: column; gap: 14px;">
+                <div>
+                    <label>اسم الزبون *</label>
+                    <input type="text" id="edit-m-name" value="${client.name}" required>
+                </div>
+                <div>
+                    <label>رقم الهاتف *</label>
+                    <input type="tel" id="edit-m-phone" value="${client.phone}" required>
+                </div>
+                <button type="submit" class="btn btn-success" style="width: 100%; padding: 14px;">حفظ التعديلات</button>
+            </form>
+        `);
+    }
+
+    function openInitialBalanceModal(clientId) {
         const client = db.members.find(m => m.id === clientId);
         if (!client) return;
 
@@ -907,6 +931,33 @@
                 <button type="submit" class="btn btn-warning" style="width: 100%; padding: 14px;">حفظ الرصيد الافتتاحي</button>
             </form>
         `);
+    }
+
+        function saveMemberEdit(e, clientId) {
+        e.preventDefault();
+        const client = db.members.find(m => m.id === clientId);
+        if (!client) return;
+
+        const newName = document.getElementById('edit-m-name').value.trim();
+        const newPhone = document.getElementById('edit-m-phone').value.trim();
+
+        // تحديث بيانات الزبون
+        client.name = newName;
+        client.phone = newPhone;
+
+        // تحديث أسماء الزبون في الفواتير القديمة (اختياري ولكنه مهم لتناسق التقارير)
+        db.payments.forEach(p => {
+            if (p.clientId === clientId && p.details && p.details !== 'بيع نقدي' && p.details !== 'رصيد افتتاحي (دين سابق)' && p.details !== 'رصيد افتتاحي (دفعة مقدمة)') {
+                p.details = newName;
+            }
+        });
+
+        saveDB();
+        closeModal();
+        renderMembers();
+        renderPayments(); 
+        updateClientSelect();
+        showToast('✅ تم تعديل بيانات الزبون بنجاح', 'success');
     }
 
         function saveInitialBalance(e, clientId) {
